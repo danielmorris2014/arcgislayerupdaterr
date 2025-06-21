@@ -1,0 +1,36 @@
+"Create a Streamlit app named 'ArcGISLayerUpdater' that allows users to manage their ArcGIS Online content, specifically for updating and creating hosted feature layers using uploaded .zip files containing shapefiles. The app should be built with Streamlit and the ArcGIS API for Python, and it should be designed to run locally. Include the following features:
+
+Authentication:
+Provide a login interface using st.text_input for username and st.text_input(type='password') for password to authenticate with ArcGIS Online.
+Use arcgis.gis.GIS to handle authentication and store the GIS object in st.session_state for reuse.
+View Existing Content:
+After authentication, display a list of the user's existing hosted feature layers using gis.content.search with type='Feature Service'.
+Show the list in a dropdown or selectbox (st.selectbox) for easy selection.
+Update Existing Layers:
+Allow the user to select an existing feature layer from the list.
+Provide a file uploader (st.file_uploader) to upload a .zip file containing the updated shapefile.
+Include a radio button (st.radio) to choose the sharing level: Private, Organization, or Public.
+Use the FeatureLayerCollection.manager.overwrite method to update the selected layer with the uploaded shapefile.
+After updating, display the FeatureServer URL of the updated layer.
+Note: Ensure the uploaded shapefile matches the existing layer's schema, as the overwrite method requires this.
+Create New Layers:
+Provide an option to create a new feature layer by uploading a .zip file.
+Ask the user to enter a title for the new layer using st.text_input.
+Include a radio button (st.radio) to choose the sharing level: Private, Organization, or Public.
+Allow the user to optionally select existing web maps (using st.multiselect) to add the new layer to.
+Publish the uploaded .zip file as a new feature layer using gis.content.add and item.publish.
+If selected, add the new layer to the chosen web maps by updating their operational layers.
+Display the FeatureServer URL of the newly created layer.
+Sharing Settings:
+For both updating and creating layers, apply the selected sharing level using the share method (e.g., item.share(everyone=True) for Public).
+Error Handling and Feedback:
+Handle errors such as missing shapefiles in the .zip, authentication failures, or schema mismatches.
+Use st.error to display user-friendly error messages and st.success for successful operations.
+Include progress indicators (e.g., st.spinner) during file processing and layer updates.
+File Handling:
+Use temporary directories (e.g., tempfile.TemporaryDirectory) to extract and process uploaded .zip files.
+Ensure the app cleans up temporary files after processing.
+Additional Notes:
+The app should be structured with clear sections for authentication, viewing content, updating layers, and creating new layers.
+Ensure the code is well-organized, readable, and includes necessary imports (e.g., streamlit, arcgis, os, tempfile, zipfile).
+This app will enable users to easily update their ArcGIS Online maps and feature layers, toggle sharing settings, and generate FeatureServer URLs for integration with external systems like irth. It should be user-friendly, secure, and efficient for local use.
