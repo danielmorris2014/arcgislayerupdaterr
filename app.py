@@ -358,72 +358,189 @@ def authenticate_irth(username, password, debug_mode=False):
             if name:
                 login_data[name] = value
         
-        # Find username and password field names
+        # Find username and password field names with enhanced detection
         username_field = None
         password_field = None
+        submit_field = None
         
-        for input_field in login_form.find_all('input'):
-            input_type = input_field.get('type', '').lower()
-            input_name = input_field.get('name', '').lower()
-            input_id = input_field.get('id', '').lower()
-            
-            if input_type == 'password' or 'password' in input_name or 'pass' in input_name:
-                password_field = input_field.get('name')
-            elif (input_type in ['text', 'email'] or 
-                  'user' in input_name or 'email' in input_name or 'login' in input_name or
-                  'user' in input_id or 'email' in input_id or 'login' in input_id):
-                username_field = input_field.get('name')
-        
-        # Set default field names if not found
-        if not username_field:
-            username_field = 'username'
-        if not password_field:
-            password_field = 'password'
-        
-        login_data[username_field] = username
-        login_data[password_field] = password
+        form_inputs = login_form.find_all('input')
         
         if debug_mode:
-            st.write(f"🔍 Username field: {username_field}")
-            st.write(f"🔍 Password field: {password_field}")
-            st.write(f"🔍 Form data keys: {list(login_data.keys())}")
+            st.write(f"🔍 Form has {len(form_inputs)} input fields:")
+            for i, inp in enumerate(form_inputs):
+                st.write(f"  Field {i+1}: name='{inp.get('name', '')}', type='{inp.get('type', '')}', id='{inp.get('id', '')}'")
+        
+        for input_field in form_inputs:
+            input_type = input_field.get('type', '').lower()
+            input_name = input_field.get('name', '') or ''
+            input_id = input_field.get('id', '') or ''
+            
+            # Password field detection
+            if input_type == 'password':
+                password_field = input_field.get('name')
+                if debug_mode:
+                    st.write(f"🔍 Found password field: {password_field}")
+            
+            # Username field detection (more comprehensive)
+            elif input_type in ['text', 'email'] and not username_field:
+                name_lower = input_name.lower()
+                id_lower = input_id.lower()
+                
+                username_keywords = ['user', 'login', 'email', 'account', 'name']
+                if any(keyword in name_lower or keyword in id_lower for keyword in username_keywords):
+                    username_field = input_field.get('name')
+                    if debug_mode:
+                        st.write(f"🔍 Found username field: {username_field}")
+            
+            # Submit button detection
+            elif input_type in ['submit', 'button']:
+                submit_field = input_field.get('name')
+        
+        # If no specific fields found, try common patterns
+        if not username_field:
+            common_username_names = ['username', 'user', 'email', 'login', 'loginname', 'userid']
+            for common_name in common_username_names:
+                if any(inp.get('name', '').lower() == common_name for inp in form_inputs):
+                    username_field = common_name
+                    break
+            
+            # Fallback: use first text input
+            if not username_field:
+                for inp in form_inputs:
+                    if inp.get('type', '').lower() in ['text', 'email', '']:
+                        username_field = inp.get('name') or 'username'
+                        break
+        
+        if not password_field:
+            common_password_names = ['password', 'pass', 'passwd', 'pwd']
+            for common_name in common_password_names:
+                if any(inp.get('name', '').lower() == common_name for inp in form_inputs):
+                    password_field = common_name
+                    break
+            
+            # Fallback
+            if not password_field:
+                password_field = 'password'
+        
+        # Add credentials to form data
+        if username_field:
+            login_data[username_field] = username
+        if password_field:
+            login_data[password_field] = password
+        if submit_field:
+            login_data[submit_field] = 'Login'
+        
+        if debug_mode:
+            st.write(f"🔍 Final username field: {username_field}")
+            st.write(f"🔍 Final password field: {password_field}")
+            st.write(f"🔍 Submit field: {submit_field}")
+            st.write(f"🔍 Complete form data: {login_data}")
+            
+            # Show form HTML for debugging
+            st.write("**Form HTML:**")
+            st.code(str(login_form)[:1000] + "..." if len(str(login_form)) > 1000 else str(login_form))
         
         # Submit login form
         login_submit_response = session.post(post_url, data=login_data, timeout=15, allow_redirects=True)
         
         if debug_mode:
-            st.write(f"Login response status: {login_submit_response.status_code}")
-            st.write(f"Login response URL: {login_submit_response.url}")
+            st.write(f"🔍 Login response status: {login_submit_response.status_code}")
+            st.write(f"🔍 Login response URL: {login_submit_response.url}")
+            st.write(f"🔍 Response headers: {dict(login_submit_response.headers)}")
+            
+            # Show response content sample
+            response_text = login_submit_response.text
+            st.write(f"🔍 Response size: {len(response_text)} characters")
+            st.write("**Response content sample:**")
+            st.code(response_text[:2000] + "..." if len(response_text) > 2000 else response_text)
         
-        # Check if login was successful
-        success_indicators = [
-            'ManageMapLayers' in login_submit_response.url,
-            'dashboard' in login_submit_response.url.lower(),
-            'admin' in login_submit_response.url.lower(),
-            'welcome' in login_submit_response.text.lower(),
-            'logout' in login_submit_response.text.lower()
+        # Enhanced success detection
+        response_text_lower = login_submit_response.text.lower()
+        response_url_lower = login_submit_response.url.lower()
+        
+        # Strong success indicators
+        strong_success_indicators = [
+            'managemaplayers' in response_url_lower,
+            'administration' in response_url_lower and 'utilisphere' in response_url_lower,
+            'dashboard' in response_url_lower,
+            'admin' in response_url_lower and 'irth' in response_url_lower
         ]
         
+        # Moderate success indicators
+        moderate_success_indicators = [
+            'welcome' in response_text_lower,
+            'logout' in response_text_lower,
+            'sign out' in response_text_lower,
+            'administration' in response_text_lower,
+            'manage' in response_text_lower and 'layer' in response_text_lower
+        ]
+        
+        # Clear error indicators
         error_indicators = [
-            'login failed' in login_submit_response.text.lower(),
-            'invalid' in login_submit_response.text.lower(),
-            'error' in login_submit_response.text.lower(),
-            'incorrect' in login_submit_response.text.lower()
+            'login failed' in response_text_lower,
+            'invalid username' in response_text_lower,
+            'invalid password' in response_text_lower,
+            'authentication failed' in response_text_lower,
+            'incorrect' in response_text_lower and ('password' in response_text_lower or 'username' in response_text_lower),
+            'access denied' in response_text_lower,
+            'unauthorized' in response_text_lower
         ]
         
-        if any(success_indicators) and not any(error_indicators):
+        # Check for redirect back to login page
+        login_page_indicators = [
+            'login' in response_url_lower,
+            'signin' in response_url_lower,
+            'auth' in response_url_lower and 'login' in response_text_lower
+        ]
+        
+        if debug_mode:
+            st.write(f"🔍 Strong success indicators: {[ind for ind in strong_success_indicators if True]}")
+            st.write(f"🔍 Moderate success indicators: {[ind for ind in moderate_success_indicators if True]}")
+            st.write(f"🔍 Error indicators found: {any(error_indicators)}")
+            st.write(f"🔍 Login page indicators: {any(login_page_indicators)}")
+        
+        # Determine authentication result
+        if any(strong_success_indicators):
+            if debug_mode:
+                st.write("✅ Authentication successful based on URL indicators")
             return session, None
         elif any(error_indicators):
-            return None, "Authentication failed - invalid credentials"
+            return None, "Authentication failed - invalid credentials or access denied"
+        elif any(login_page_indicators):
+            return None, "Authentication failed - redirected back to login page"
+        elif any(moderate_success_indicators) and not any(error_indicators):
+            if debug_mode:
+                st.write("✅ Authentication likely successful based on page content")
+            return session, None
         else:
-            # Try to access the target page to verify login
-            target_url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
-            test_response = session.get(target_url, timeout=10)
+            # Final verification: try to access the target page
+            if debug_mode:
+                st.write("🔍 Ambiguous result - testing access to management page")
             
-            if test_response.status_code == 200 and 'login' not in test_response.url.lower():
-                return session, None
-            else:
-                return None, "Authentication may have failed - cannot access management page"
+            target_url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
+            try:
+                test_response = session.get(target_url, timeout=10)
+                
+                if debug_mode:
+                    st.write(f"🔍 Test access - Status: {test_response.status_code}")
+                    st.write(f"🔍 Test access - URL: {test_response.url}")
+                
+                # Check if we can access the management page
+                if (test_response.status_code == 200 and 
+                    'login' not in test_response.url.lower() and
+                    'signin' not in test_response.url.lower()):
+                    
+                    # Look for management-specific content
+                    test_content = test_response.text.lower()
+                    if any(keyword in test_content for keyword in ['manage', 'layer', 'administration', 'map']):
+                        if debug_mode:
+                            st.write("✅ Authentication successful - can access management page")
+                        return session, None
+                
+                return None, "Authentication verification failed - cannot confirm access to management features"
+                
+            except Exception as e:
+                return None, f"Authentication verification error: {str(e)}"
             
     except requests.RequestException as e:
         return None, f"Connection error: {str(e)}"
