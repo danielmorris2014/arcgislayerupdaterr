@@ -1,0 +1,28 @@
+Refine the 'ArcGISLayerUpdater' Streamlit app to fix irth utilitsphere authentication issues and resolve the StreamlitAPIException related to st.button() within st.form(), while preserving all existing functionality (authentication with ArcGIS Online, layer management, table editing, sublayer updates, sharing settings, and FeatureServer URL generation). The app should run locally using Streamlit and the ArcGIS API for Python, with these specific adjustments:
+
+Improved irth Authentication:
+Enhance the 'irth Integration' section with st.text_input for irth username and st.text_input(type='password') for password.
+Use requests with session handling to log in to https://www.irth.com/Utilisphere/login by sending a POST request to https://www.irth.com/Utilisphere/./Logon.aspx?ReturnUrl=%2fUtilisphere%2flogin, including the form data: __EVENTTARGET, __EVENTARGUMENT, __VIEWSTATE, __VIEWSTATEGENERATOR, __EVENTVALIDATION, ctl00$cphLogin$TimeZoneOffset (set to 300), ctl00$cphLogin$_ScreenWidth (set to 1920), ctl00$cphLogin$_ScreenHeight (set to 1080), ctl00$cphLogin$_IDPInitSAML, ctl00$cphLogin$hdnOIDToken, ctl00$cphLogin$UserIDTextBox (username), ctl00$cphLogin$PasswordTextBox (password), and ctl00$cphLogin$ButtonLogon (set to 'Log in').
+Check the response for a 200 status and navigation away from the login page; if redirected to https://www.irth.com/Irthnet/Errors/GenericError.htm, assume MFA or session validation failure, storing the session cookie in st.session_state only on success.
+Display a st.warning if authentication fails: 'Login failed, possibly due to MFA or session validation. Contact https://irthsupport.irthsolutions.com/support/home for assistance.'
+Manual URL Input as Fallback:
+Add a st.text_area labeled 'irth Map Layer URLs' for users to paste URLs manually if automated login fails, one per line.
+Include a note with st.write: 'If login fails, log in at https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx and copy URLs here.'
+Sync irth Map Layer URLs with ArcGIS:
+After updating or creating a feature layer in ArcGIS Online, add a form (st.form) for syncing with irth.
+Inside the form, include a st.selectbox to choose an irth URL (from automated fetch if successful, or manual input) and map it to the ArcGIS FeatureServer URL.
+Move the ‘Sync with irth’ button (st.button) outside the form to avoid the StreamlitAPIException, triggering the form submission.
+If automated login succeeds, fetch the Manage Map Layers page with the session, parse URLs with BeautifulSoup (e.g., from tables), and populate the selectbox.
+Display a success message (st.success) with the new FeatureServer URL and instructions to update irth manually if needed.
+Offer a CSV export (st.download_button) with ArcGIS layer titles, FeatureServer URLs, and matched irth URLs.
+Error Handling and Feedback:
+Use st.spinner during authentication and URL retrieval.
+Handle errors (e.g., 403, parsing failures) with st.error, and add a debug mode (st.checkbox) to show raw responses with st.code.
+Note potential MFA issues with st.warning.
+User Guidance:
+Include a link to https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx.
+Add a tip to copy URLs manually if automation fails.
+General Improvements:
+Keep the irth section separate and compatible with existing logic.
+Ensure form restructuring resolves the StreamlitAPIException by placing buttons outside forms.
+This refinement improves irth authentication and fixes the form button issue, providing a robust integration workflow.

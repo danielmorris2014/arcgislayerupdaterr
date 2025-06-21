@@ -886,17 +886,17 @@ def irth_integration():
                         st.write("3. **Direct URL Entry**: Use the URL update feature with manually obtained layer URLs")
                         
                         # Provide manual URL entry option
-                        with st.expander("Manual Layer URL Entry"):
-                            st.write("If you can access irth manually, you can enter layer URLs here:")
-                            
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                layer_name = st.text_input("Layer Name", key="manual_name")
-                            with col2:
-                                layer_url = st.text_input("Layer URL", key="manual_url")
-                            
-                            # Add button inside the expander
-                            if st.button("Add Manual Layer", key="add_manual") and layer_name and layer_url:
+                        st.write("**Manual Layer URL Entry**")
+                        st.write("If you can access irth manually, you can enter layer URLs here:")
+                        
+                        col1, col2, col3 = st.columns([3, 3, 2])
+                        with col1:
+                            layer_name = st.text_input("Layer Name", key="manual_name")
+                        with col2:
+                            layer_url = st.text_input("Layer URL", key="manual_url")
+                        with col3:
+                            st.write("")  # Spacing
+                            if st.button("Add Layer", key="add_manual") and layer_name and layer_url:
                                 if 'manual_irth_layers' not in st.session_state:
                                     st.session_state.manual_irth_layers = []
                                 
@@ -1156,77 +1156,79 @@ def irth_integration():
         feature_layers = get_feature_layers()
         
         if feature_layers:
-            with st.form("update_irth_form"):
-                col1, col2 = st.columns(2)
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Select ArcGIS layer
+                arcgis_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+                selected_arcgis_key = st.selectbox(
+                    "Select ArcGIS Online Feature Layer",
+                    options=list(arcgis_options.keys()),
+                    help="Choose the ArcGIS layer whose URL you want to sync with irth",
+                    key="irth_arcgis_select"
+                )
                 
-                with col1:
-                    # Select ArcGIS layer
-                    arcgis_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
-                    selected_arcgis_key = st.selectbox(
-                        "Select ArcGIS Online Feature Layer",
-                        options=list(arcgis_options.keys()),
-                        help="Choose the ArcGIS layer whose URL you want to sync with irth"
-                    )
+                if selected_arcgis_key:
+                    selected_arcgis_layer = arcgis_options[selected_arcgis_key]
+                    st.info(f"FeatureServer URL: {selected_arcgis_layer.url}")
+            
+            with col2:
+                # irth layer identification
+                irth_layer_id = st.text_input(
+                    "irth Layer ID or Name",
+                    help="Enter the irth layer ID or name to update",
+                    key="irth_layer_id_input"
+                )
+                
+                irth_layer_name = st.text_input(
+                    "irth Layer Display Name (Optional)",
+                    help="Optional: Update the display name for the layer",
+                    key="irth_layer_name_input"
+                )
+            
+            # Sync button outside of form
+            if st.button("Sync URL with irth", type="primary", key="sync_irth_url"):
+                if selected_arcgis_key and irth_layer_id:
+                    selected_layer = arcgis_options[selected_arcgis_key]
+                    new_url = selected_layer.url
                     
-                    if selected_arcgis_key:
-                        selected_arcgis_layer = arcgis_options[selected_arcgis_key]
-                        st.info(f"FeatureServer URL: {selected_arcgis_layer.url}")
-                
-                with col2:
-                    # irth layer identification
-                    irth_layer_id = st.text_input(
-                        "irth Layer ID or Name",
-                        help="Enter the irth layer ID or name to update"
-                    )
-                    
-                    irth_layer_name = st.text_input(
-                        "irth Layer Display Name (Optional)",
-                        help="Optional: Update the display name for the layer"
-                    )
-                
-                update_irth_button = st.form_submit_button("Sync URL with irth", type="primary")
-                
-                if update_irth_button:
-                    if selected_arcgis_key and irth_layer_id:
-                        selected_layer = arcgis_options[selected_arcgis_key]
-                        new_url = selected_layer.url
+                    with st.spinner("Updating irth layer URL..."):
+                        success, message = update_irth_layer_url(
+                            st.session_state.irth_session,
+                            irth_layer_id,
+                            new_url,
+                            irth_layer_name
+                        )
                         
-                        with st.spinner("Updating irth layer URL..."):
-                            success, message = update_irth_layer_url(
-                                st.session_state.irth_session,
-                                irth_layer_id,
-                                new_url,
-                                irth_layer_name
-                            )
+                        if success:
+                            st.success(message)
+                            st.info(f"Updated irth layer '{irth_layer_id}' with URL: {new_url}")
                             
-                            if success:
-                                st.success(message)
-                                st.info(f"Updated irth layer '{irth_layer_id}' with URL: {new_url}")
-                                
-                                # Generate update log for IRTH integration
-                                update_info = {
-                                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                                    'arcgis_layer': selected_layer.title,
-                                    'arcgis_id': selected_layer.id,
-                                    'irth_layer_id': irth_layer_id,
-                                    'new_url': new_url,
-                                    'status': 'success'
-                                }
-                                
-                                # Offer download of update log
-                                log_df = pd.DataFrame([update_info])
-                                csv_data = log_df.to_csv(index=False)
-                                
-                                st.download_button(
-                                    label="Download Update Log (CSV)",
-                                    data=csv_data,
-                                    file_name=f"irth_update_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                                    mime="text/csv"
-                                )
-                            else:
-                                st.error(message)
-                    else:
-                        st.warning("Please select an ArcGIS layer and enter an irth layer ID")
+                            # Generate update log for IRTH integration
+                            update_info = {
+                                'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                'arcgis_layer': selected_layer.title,
+                                'arcgis_id': selected_layer.id,
+                                'irth_layer_id': irth_layer_id,
+                                'new_url': new_url,
+                                'status': 'success'
+                            }
+                            
+                            # Offer download of update log
+                            log_df = pd.DataFrame([update_info])
+                            csv_data = log_df.to_csv(index=False)
+                            
+                            st.download_button(
+                                label="Download Update Log (CSV)",
+                                data=csv_data,
+                                file_name=f"irth_update_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv",
+                                key="download_irth_log"
+                            )
+                        else:
+                            st.error(message)
+                else:
+                    st.warning("Please select an ArcGIS layer and enter an irth layer ID")
         else:
             st.warning("No ArcGIS feature layers found. Please ensure you're authenticated with ArcGIS Online.")
         
