@@ -139,33 +139,102 @@ def save_user_settings():
         return False
 
 def validate_coordinate_system(gdf, target_layer=None):
-    """Validate and offer reprojection for coordinate systems"""
-    try:
-        source_crs = gdf.crs
-        if target_layer:
-            # Get target layer CRS
-            target_crs_info = target_layer.properties.get('spatialReference', {})
-            target_wkid = target_crs_info.get('wkid', 4326)
-            
-            if source_crs and source_crs.to_epsg() != target_wkid:
-                st.warning(f"Coordinate system mismatch: Source ({source_crs.to_epsg()}) vs Target ({target_wkid})")
-                
-                if st.session_state.user_settings.get('auto_reproject', True):
-                    if st.button("Reproject to match target layer"):
-                        try:
-                            gdf = gdf.to_crs(f"EPSG:{target_wkid}")
-                            st.success(f"Reprojected to EPSG:{target_wkid}")
-                            return gdf, True
-                        except Exception as e:
-                            st.error(f"Reprojection failed: {str(e)}")
-                            return gdf, False
-                else:
-                    st.info("Auto-reprojection disabled in settings")
-                    
-        return gdf, True
-    except Exception as e:
-        st.error(f"Error validating coordinate system: {str(e)}")
+    """Enhanced coordinate system validation with detailed reprojection options"""
+    if gdf.crs is None:
+        st.warning("No coordinate system detected in uploaded data")
         return gdf, False
+    
+    source_crs = gdf.crs
+    st.info(f"Source CRS: {source_crs}")
+    
+    # Extended CRS options for sublayer updates
+    crs_options = {
+        "Keep Current": str(source_crs),
+        "WGS84 (EPSG:4326)": "EPSG:4326",
+        "Web Mercator (EPSG:3857)": "EPSG:3857",
+        "NAD83 (EPSG:4269)": "EPSG:4269",
+        "NAD83 UTM Zone 10N (EPSG:26910)": "EPSG:26910",
+        "NAD83 UTM Zone 11N (EPSG:26911)": "EPSG:26911",
+        "NAD83 UTM Zone 12N (EPSG:26912)": "EPSG:26912",
+        "State Plane California (EPSG:2154)": "EPSG:2154",
+        "State Plane Texas (EPSG:3081)": "EPSG:3081",
+        "British National Grid (EPSG:27700)": "EPSG:27700"
+    }
+    
+    target_crs = None
+    if target_layer:
+        try:
+            sr = target_layer.properties.spatialReference
+            if sr and hasattr(sr, 'wkid'):
+                target_crs = f"EPSG:{sr.wkid}"
+                crs_options[f"Target Layer CRS ({target_crs})"] = target_crs
+                st.info(f"Target layer CRS: {target_crs}")
+                
+                # Check for mismatch
+                if str(source_crs) != target_crs:
+                    st.warning(f"CRS mismatch detected: {source_crs} vs {target_crs}")
+        except Exception as e:
+            st.warning(f"Could not retrieve target layer CRS: {str(e)}")
+    
+    # CRS selection interface
+    st.subheader("Coordinate System Options")
+    selected_crs = st.selectbox(
+        "Target Spatial Reference",
+        options=list(crs_options.keys()),
+        help="Select the coordinate system for the data",
+        index=list(crs_options.keys()).index(f"Target Layer CRS ({target_crs})") if target_crs and f"Target Layer CRS ({target_crs})" in crs_options else 0
+    )
+    
+    # Custom EPSG option
+    if st.checkbox("Use Custom EPSG Code"):
+        custom_epsg = st.text_input(
+            "EPSG Code",
+            placeholder="e.g., 4326, 3857, 26910",
+            help="Enter numeric EPSG code"
+        )
+        if custom_epsg:
+            try:
+                target_crs_code = f"EPSG:{int(custom_epsg)}"
+                selected_crs = f"Custom ({target_crs_code})"
+                crs_options[selected_crs] = target_crs_code
+            except ValueError:
+                st.error("Enter a valid numeric EPSG code")
+                return gdf, False
+    
+    # Apply reprojection if needed
+    if selected_crs != "Keep Current":
+        target_crs_code = crs_options[selected_crs]
+        
+        if str(source_crs) != target_crs_code:
+            if st.button("Apply Reprojection", type="primary"):
+                with st.spinner(f"Reprojecting to {target_crs_code}..."):
+                    try:
+                        original_bounds = gdf.total_bounds
+                        gdf_reprojected = gdf.to_crs(target_crs_code)
+                        new_bounds = gdf_reprojected.total_bounds
+                        
+                        st.success(f"Reprojected from {source_crs} to {target_crs_code}")
+                        
+                        # Show bounds comparison
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write("**Original Bounds:**")
+                            st.write(f"X: {original_bounds[0]:.2f} to {original_bounds[2]:.2f}")
+                            st.write(f"Y: {original_bounds[1]:.2f} to {original_bounds[3]:.2f}")
+                        with col2:
+                            st.write("**Reprojected Bounds:**")
+                            st.write(f"X: {new_bounds[0]:.2f} to {new_bounds[2]:.2f}")
+                            st.write(f"Y: {new_bounds[1]:.2f} to {new_bounds[3]:.2f}")
+                        
+                        return gdf_reprojected, True
+                    except Exception as e:
+                        st.error(f"Reprojection failed: {str(e)}")
+                        return gdf, False
+            else:
+                st.info("Click 'Apply Reprojection' to proceed with coordinate transformation")
+                return gdf, False
+    
+    return gdf, True
 
 def apply_sharing_settings(item, sharing_level):
     """Apply sharing settings to an item"""
@@ -657,74 +726,229 @@ def update_existing_layer():
                     return
                 
                 try:
-                    with st.spinner("Updating layer..."):
-                        # Save uploaded file to temporary location
-                        with tempfile.TemporaryDirectory() as temp_dir:
-                            temp_zip_path = os.path.join(temp_dir, "update.zip")
-                            with open(temp_zip_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
-                            
-                            # Get the feature layer collection
-                            flc = FeatureLayerCollection.fromitem(selected_layer)
-                            
-                            if selected_sublayer and len(sublayers) > 1:
-                                # Update specific sublayer
-                                target_layer = selected_sublayer['layer']
+                    # Load and validate new data first
+                    st.subheader("Data Validation and Preparation")
+                    gdf = load_shapefile_data(uploaded_file)
+                    if gdf is None:
+                        st.error("Failed to load shapefile data")
+                        return
+                    
+                    # Determine target layer for validation
+                    target_layer = selected_sublayer['layer'] if selected_sublayer else selected_layer.layers[0]
+                    
+                    # Get current layer data for comparison
+                    with st.spinner("Loading current layer data..."):
+                        current_features = target_layer.query()
+                        current_count = len(current_features.features) if current_features.features else 0
+                        
+                        # Get layer schema
+                        layer_fields = target_layer.properties.fields
+                        layer_field_names = [field['name'] for field in layer_fields]
+                        layer_geometry_type = target_layer.properties.geometryType
+                    
+                    # Validate coordinate system with enhanced options
+                    gdf, crs_valid = validate_coordinate_system(gdf, target_layer)
+                    if not crs_valid:
+                        st.error("Coordinate system validation failed")
+                        return
+                    
+                    # Schema validation
+                    st.subheader("Schema Validation")
+                    new_field_names = list(gdf.columns)
+                    if 'geometry' in new_field_names:
+                        new_field_names.remove('geometry')
+                    
+                    # Check field compatibility
+                    missing_fields = set(layer_field_names) - set(new_field_names) - {'OBJECTID', 'Shape_Length', 'Shape_Area'}
+                    extra_fields = set(new_field_names) - set(layer_field_names)
+                    
+                    schema_col1, schema_col2 = st.columns(2)
+                    with schema_col1:
+                        st.write("**Target Layer Fields:**")
+                        for field in layer_field_names:
+                            if field not in ['OBJECTID', 'Shape_Length', 'Shape_Area']:
+                                st.write(f"• {field}")
+                    
+                    with schema_col2:
+                        st.write("**New Data Fields:**")
+                        for field in new_field_names:
+                            st.write(f"• {field}")
+                    
+                    if missing_fields:
+                        st.warning(f"Missing fields in new data: {', '.join(missing_fields)}")
+                    if extra_fields:
+                        st.info(f"Extra fields in new data: {', '.join(extra_fields)}")
+                    
+                    # Geometry type validation
+                    if hasattr(gdf.geometry.iloc[0], 'geom_type'):
+                        new_geometry_type = gdf.geometry.iloc[0].geom_type
+                        geometry_compatible = (
+                            (layer_geometry_type == 'esriGeometryPoint' and new_geometry_type in ['Point', 'MultiPoint']) or
+                            (layer_geometry_type == 'esriGeometryPolyline' and new_geometry_type in ['LineString', 'MultiLineString']) or
+                            (layer_geometry_type == 'esriGeometryPolygon' and new_geometry_type in ['Polygon', 'MultiPolygon'])
+                        )
+                        
+                        if not geometry_compatible:
+                            st.error(f"Geometry type mismatch: Layer expects {layer_geometry_type}, data contains {new_geometry_type}")
+                            return
+                        else:
+                            st.success(f"Geometry type compatible: {new_geometry_type}")
+                    
+                    # Before/After comparison
+                    st.subheader("Before/After Comparison")
+                    comparison_col1, comparison_col2 = st.columns(2)
+                    
+                    with comparison_col1:
+                        st.write("**Current State:**")
+                        st.metric("Feature Count", current_count)
+                        if current_count > 0:
+                            sample_feature = current_features.features[0]
+                            st.write("**Sample Attributes:**")
+                            for key, value in list(sample_feature.attributes.items())[:5]:
+                                if key not in ['OBJECTID', 'Shape_Length', 'Shape_Area']:
+                                    st.write(f"• {key}: {value}")
+                    
+                    with comparison_col2:
+                        st.write("**New State:**")
+                        st.metric("Feature Count", len(gdf))
+                        st.write("**Sample Attributes:**")
+                        sample_row = gdf.iloc[0] if len(gdf) > 0 else None
+                        if sample_row is not None:
+                            for col in list(gdf.columns)[:5]:
+                                if col != 'geometry':
+                                    st.write(f"• {col}: {sample_row[col]}")
+                    
+                    # Update method selection
+                    update_method = st.radio(
+                        "Update Method",
+                        ["Truncate and Append", "Overwrite Entire Layer"],
+                        help="Choose how to update the layer"
+                    )
+                    
+                    # Confirmation and execution
+                    if st.button("Confirm and Execute Update", type="primary"):
+                        with st.spinner("Executing update..."):
+                            if update_method == "Truncate and Append" and selected_sublayer:
+                                # Precise sublayer targeting
+                                progress_bar = st.progress(0)
+                                status_text = st.empty()
                                 
-                                # Truncate and append for sublayer update
+                                # Step 1: Truncate
+                                status_text.text("Step 1/3: Truncating sublayer...")
+                                progress_bar.progress(0.33)
+                                
                                 truncate_result = target_layer.manager.truncate()
-                                if truncate_result.get('success', False):
-                                    # Load new data and append
-                                    gdf = load_shapefile_data(uploaded_file)
-                                    if gdf is not None:
-                                        # Convert to features for append
-                                        features = []
-                                        for _, row in gdf.iterrows():
-                                            feature = {
-                                                'attributes': {col: val for col, val in row.items() if col != 'geometry'},
-                                                'geometry': json.loads(row['geometry'].__geo_interface__) if 'geometry' in row else None
-                                            }
-                                            features.append(feature)
-                                        
-                                        append_result = target_layer.edit_features(adds=features)
-                                        if all(r.get('success', False) for r in append_result.get('addResults', [])):
-                                            st.success(f"✅ Sublayer '{selected_sublayer['name']}' updated successfully!")
-                                        else:
-                                            st.error("Failed to append new features to sublayer")
-                                    else:
-                                        st.error("Failed to load shapefile data")
-                                else:
+                                if not truncate_result.get('success', False):
                                     st.error("Failed to truncate sublayer")
-                            else:
-                                # Update entire layer
-                                result = flc.manager.overwrite(temp_zip_path)
+                                    return
                                 
-                                if result:
-                                    st.success("✅ Layer updated successfully!")
+                                # Step 2: Prepare features
+                                status_text.text("Step 2/3: Preparing new features...")
+                                progress_bar.progress(0.66)
+                                
+                                features = []
+                                batch_size = st.session_state.user_settings.get('batch_size', 1000)
+                                
+                                for _, row in gdf.iterrows():
+                                    feature = {
+                                        'attributes': {col: val for col, val in row.items() if col != 'geometry' and not pd.isna(val)}
+                                    }
+                                    
+                                    if 'geometry' in row and hasattr(row['geometry'], '__geo_interface__'):
+                                        feature['geometry'] = row['geometry'].__geo_interface__
+                                    
+                                    features.append(feature)
+                                
+                                # Step 3: Append in batches
+                                status_text.text("Step 3/3: Adding new features...")
+                                progress_bar.progress(1.0)
+                                
+                                success_count = 0
+                                total_batches = (len(features) + batch_size - 1) // batch_size
+                                
+                                for i in range(0, len(features), batch_size):
+                                    batch = features[i:i + batch_size]
+                                    batch_num = (i // batch_size) + 1
+                                    status_text.text(f"Adding batch {batch_num}/{total_batches} ({len(batch)} features)...")
+                                    
+                                    result = target_layer.edit_features(adds=batch)
+                                    batch_success = sum(1 for r in result.get('addResults', []) if r.get('success', False))
+                                    success_count += batch_success
+                                    
+                                    if batch_success != len(batch):
+                                        st.warning(f"Batch {batch_num}: {batch_success}/{len(batch)} features added successfully")
+                                
+                                status_text.text("Update completed!")
+                                
+                                if success_count == len(features):
+                                    st.success(f"Sublayer '{selected_sublayer['name']}' updated successfully!")
+                                    st.info(f"Added {success_count} features")
                                 else:
-                                    st.error("Failed to update layer")
+                                    st.warning(f"Partial success: {success_count}/{len(features)} features added")
+                                
+                            else:
+                                # Overwrite entire layer
+                                with tempfile.TemporaryDirectory() as temp_dir:
+                                    temp_zip_path = os.path.join(temp_dir, "update.zip")
+                                    with open(temp_zip_path, "wb") as f:
+                                        f.write(uploaded_file.getbuffer())
+                                    
+                                    flc = FeatureLayerCollection.fromitem(selected_layer)
+                                    result = flc.manager.overwrite(temp_zip_path)
+                                    
+                                    if result:
+                                        st.success("Layer updated successfully!")
+                                    else:
+                                        st.error("Failed to update layer")
                             
                             # Apply sharing settings
                             apply_sharing_settings(selected_layer, sharing_level)
                             
-                            st.info(f"**FeatureServer URL:** {selected_layer.url}")
+                            # Generate IRTH export
+                            layer_info = {
+                                'title': selected_layer.title,
+                                'id': selected_layer.id,
+                                'url': selected_layer.url,
+                                'sublayer': selected_sublayer['name'] if selected_sublayer else None,
+                                'method': update_method,
+                                'features_updated': len(gdf)
+                            }
                             
-                            # Display layer details
-                            st.subheader("Updated Layer Details")
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.write(f"**Title:** {selected_layer.title}")
-                                st.write(f"**Type:** {selected_layer.type}")
-                                st.write(f"**Sharing:** {sharing_level}")
-                            with col2:
-                                st.write(f"**Owner:** {selected_layer.owner}")
-                                st.write(f"**Modified:** {selected_layer.modified}")
-                                st.write(f"**ID:** {selected_layer.id}")
+                            irth_df = generate_irth_export(layer_info, "update")
+                            csv_data = irth_df.to_csv(index=False)
+                            
+                            # Final results display
+                            st.subheader("Update Results")
+                            results_col1, results_col2 = st.columns(2)
+                            
+                            with results_col1:
+                                st.write("**Layer Information:**")
+                                st.write(f"• Title: {selected_layer.title}")
+                                st.write(f"• ID: {selected_layer.id}")
+                                st.write(f"• Updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                                if selected_sublayer:
+                                    st.write(f"• Sublayer: {selected_sublayer['name']}")
+                            
+                            with results_col2:
+                                st.write("**Update Summary:**")
+                                st.write(f"• Method: {update_method}")
+                                st.write(f"• Features: {len(gdf)}")
+                                st.write(f"• Sharing: {sharing_level}")
+                                
+                                # IRTH download
+                                st.download_button(
+                                    label="Download IRTH Export (CSV)",
+                                    data=csv_data,
+                                    file_name=f"irth_update_{selected_layer.title}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv"
+                                )
+                            
+                            st.info(f"FeatureServer URL: {selected_layer.url}")
                                 
                 except Exception as e:
                     st.error(f"Error updating layer: {str(e)}")
                     if "schema" in str(e).lower():
-                        st.info("💡 **Tip:** Make sure the uploaded shapefile has the same schema (field names and types) as the existing layer")
+                        st.info("Make sure the uploaded shapefile has compatible schema with the existing layer")
             else:
                 st.warning("Please select a layer and upload a zip file")
 
