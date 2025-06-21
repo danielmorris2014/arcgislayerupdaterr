@@ -1,0 +1,17 @@
+"Enhance the existing 'ArcGISLayerUpdater' Streamlit app to include the following new features while maintaining all previous functionality (authentication, viewing existing feature layers, updating layers, creating new layers, managing sharing settings, and generating FeatureServer URLs). The app should run locally using Streamlit and the ArcGIS API for Python. Add these enhancements:
+
+Edit and Delete Table Contents for Uploaded .shp Files:
+After uploading a .zip file containing a .shp file, allow users to view the feature layer's attribute table using st.dataframe().
+Provide options to edit individual rows (e.g., update field values) and delete rows directly within the app.
+Use the ArcGIS API to apply these edits to the feature layer, ensuring changes are reflected in ArcGIS Online.
+Include error handling for invalid edits or deletions (e.g., st.error for failed operations).
+Update a Single Layer Within a Feature Layer:
+For feature layers with multiple layers (e.g., a feature service with sublayers), allow users to select a specific sublayer to update when choosing an existing layer to update.
+Add a dropdown or selectbox (st.selectbox) to list available sublayers within the selected feature layer.
+Enable uploading a .zip file to overwrite only the selected sublayer using the FeatureLayerCollection.manager.truncate and FeatureLayerCollection.manager.append methods or equivalent, ensuring the rest of the feature layer remains unchanged.
+Display a confirmation message (st.success) after a successful sublayer update.
+General Improvements:
+Ensure the app maintains the existing structure with clear sections for authentication, viewing content, updating layers, and creating new layers.
+Preserve existing features like file handling with temporary directories, sharing settings (Private, Organization, Public), and progress indicators (st.spinner).
+Update error handling to cover new operations, displaying user-friendly messages with st.error or st.warning as needed.
+This enhancement will allow users to manage individual .shp file contents and update specific sublayers within feature layers, improving flexibility for integration with systems like irth.

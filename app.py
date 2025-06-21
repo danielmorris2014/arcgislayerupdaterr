@@ -2,9 +2,12 @@ import streamlit as st
 import os
 import tempfile
 import zipfile
+import geopandas as gpd
 from arcgis.gis import GIS
-from arcgis.features import FeatureLayerCollection
+from arcgis.features import FeatureLayerCollection, FeatureLayer
 import pandas as pd
+import json
+from typing import Dict, List, Any
 
 # Page configuration
 st.set_page_config(
@@ -113,6 +116,157 @@ def apply_sharing_settings(item, sharing_level):
         st.error(f"Error applying sharing settings: {str(e)}")
         return False
 
+def get_layer_sublayers(feature_layer):
+    """Get sublayers from a feature layer"""
+    try:
+        flc = FeatureLayerCollection.fromitem(feature_layer)
+        sublayers = []
+        for layer in flc.layers:
+            sublayers.append({
+                'id': layer.properties.id,
+                'name': layer.properties.name,
+                'layer': layer
+            })
+        return sublayers
+    except Exception as e:
+        st.error(f"Error getting sublayers: {str(e)}")
+        return []
+
+def load_shapefile_data(zip_file):
+    """Load shapefile data from zip file"""
+    try:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_zip_path = os.path.join(temp_dir, "temp.zip")
+            with open(temp_zip_path, "wb") as f:
+                f.write(zip_file.getbuffer())
+            
+            # Extract zip file
+            with zipfile.ZipFile(temp_zip_path, 'r') as zip_ref:
+                zip_ref.extractall(temp_dir)
+            
+            # Find the .shp file
+            shp_files = [f for f in os.listdir(temp_dir) if f.endswith('.shp')]
+            if shp_files:
+                shp_path = os.path.join(temp_dir, shp_files[0])
+                gdf = gpd.read_file(shp_path)
+                return gdf
+            else:
+                st.error("No shapefile found in zip archive")
+                return None
+    except Exception as e:
+        st.error(f"Error loading shapefile: {str(e)}")
+        return None
+
+def display_editable_table(gdf):
+    """Display and edit feature data"""
+    if gdf is None or gdf.empty:
+        st.warning("No data to display")
+        return None, None
+    
+    st.subheader("Feature Data")
+    
+    # Convert geometry to string for display
+    display_df = gdf.copy()
+    if 'geometry' in display_df.columns:
+        display_df['geometry'] = display_df['geometry'].astype(str)
+    
+    # Display data with editing capabilities
+    edited_df = st.data_editor(
+        display_df,
+        num_rows="dynamic",
+        use_container_width=True,
+        key="feature_editor"
+    )
+    
+    # Track changes
+    added_rows = []
+    deleted_rows = []
+    modified_rows = []
+    
+    if not edited_df.equals(display_df):
+        # Find added rows
+        if len(edited_df) > len(display_df):
+            added_rows = edited_df.iloc[len(display_df):].index.tolist()
+        
+        # Find deleted rows
+        if len(edited_df) < len(display_df):
+            deleted_rows = list(set(display_df.index) - set(edited_df.index))
+        
+        # Find modified rows
+        for idx in edited_df.index:
+            if idx < len(display_df):
+                if not edited_df.loc[idx].equals(display_df.loc[idx]):
+                    modified_rows.append(idx)
+    
+    return edited_df, {
+        'added': added_rows,
+        'deleted': deleted_rows,
+        'modified': modified_rows
+    }
+
+def apply_edits_to_layer(feature_layer, original_gdf, edited_df, changes):
+    """Apply edits to the feature layer"""
+    try:
+        if not changes['added'] and not changes['deleted'] and not changes['modified']:
+            st.info("No changes to apply")
+            return True
+        
+        # Convert edited_df back to GeoDataFrame if needed
+        if 'geometry' in edited_df.columns and isinstance(edited_df['geometry'].iloc[0], str):
+            from shapely import wkt
+            edited_df['geometry'] = edited_df['geometry'].apply(wkt.loads)
+            edited_gdf = gpd.GeoDataFrame(edited_df, geometry='geometry')
+        else:
+            edited_gdf = edited_df
+        
+        # Apply edits using ArcGIS API
+        if changes['deleted']:
+            # Delete features
+            delete_ids = [str(i) for i in changes['deleted']]
+            if hasattr(feature_layer, 'delete_features'):
+                result = feature_layer.delete_features(where=f"OBJECTID IN ({','.join(delete_ids)})")
+                if not result.get('deleteResults', [{}])[0].get('success', False):
+                    st.error("Failed to delete some features")
+        
+        if changes['added']:
+            # Add new features
+            new_features = []
+            for idx in changes['added']:
+                if idx < len(edited_gdf):
+                    row = edited_gdf.iloc[idx]
+                    feature = {
+                        'attributes': {col: val for col, val in row.items() if col != 'geometry'},
+                        'geometry': json.loads(row['geometry'].__geo_interface__) if 'geometry' in row else None
+                    }
+                    new_features.append(feature)
+            
+            if new_features and hasattr(feature_layer, 'edit_features'):
+                result = feature_layer.edit_features(adds=new_features)
+                if not all(r.get('success', False) for r in result.get('addResults', [])):
+                    st.error("Failed to add some features")
+        
+        if changes['modified']:
+            # Update existing features
+            update_features = []
+            for idx in changes['modified']:
+                if idx < len(edited_gdf):
+                    row = edited_gdf.iloc[idx]
+                    feature = {
+                        'attributes': {col: val for col, val in row.items() if col != 'geometry'},
+                        'geometry': json.loads(row['geometry'].__geo_interface__) if 'geometry' in row else None
+                    }
+                    update_features.append(feature)
+            
+            if update_features and hasattr(feature_layer, 'edit_features'):
+                result = feature_layer.edit_features(updates=update_features)
+                if not all(r.get('success', False) for r in result.get('updateResults', [])):
+                    st.error("Failed to update some features")
+        
+        return True
+    except Exception as e:
+        st.error(f"Error applying edits: {str(e)}")
+        return False
+
 def update_existing_layer():
     """Update an existing feature layer"""
     st.header("🔄 Update Existing Layer")
@@ -127,14 +281,37 @@ def update_existing_layer():
     # Create layer selection options
     layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
     
-    with st.form("update_layer_form"):
-        # Layer selection
-        selected_layer_key = st.selectbox(
-            "Select Feature Layer to Update",
-            options=list(layer_options.keys()),
-            help="Choose the feature layer you want to update"
-        )
+    # Layer selection outside form for sublayer detection
+    selected_layer_key = st.selectbox(
+        "Select Feature Layer to Update",
+        options=list(layer_options.keys()),
+        help="Choose the feature layer you want to update",
+        key="layer_selector"
+    )
+    
+    selected_layer = layer_options[selected_layer_key] if selected_layer_key else None
+    
+    # Get sublayers if available
+    sublayers = []
+    selected_sublayer = None
+    if selected_layer:
+        sublayers = get_layer_sublayers(selected_layer)
         
+        if len(sublayers) > 1:
+            st.subheader("Sublayer Selection")
+            sublayer_options = {f"{sub['name']} (ID: {sub['id']})": sub for sub in sublayers}
+            selected_sublayer_key = st.selectbox(
+                "Select Sublayer to Update",
+                options=list(sublayer_options.keys()),
+                help="Choose the specific sublayer to update",
+                key="sublayer_selector"
+            )
+            selected_sublayer = sublayer_options[selected_sublayer_key] if selected_sublayer_key else None
+        elif len(sublayers) == 1:
+            selected_sublayer = sublayers[0]
+            st.info(f"Single sublayer detected: {selected_sublayer['name']}")
+    
+    with st.form("update_layer_form"):
         # File upload
         uploaded_file = st.file_uploader(
             "Upload Shapefile (.zip)",
@@ -152,9 +329,7 @@ def update_existing_layer():
         update_button = st.form_submit_button("Update Layer", type="primary")
         
         if update_button:
-            if uploaded_file and selected_layer_key:
-                selected_layer = layer_options[selected_layer_key]
-                
+            if uploaded_file and selected_layer:
                 # Validate zip file
                 is_valid, message = validate_zip_file(uploaded_file)
                 if not is_valid:
@@ -172,29 +347,59 @@ def update_existing_layer():
                             # Get the feature layer collection
                             flc = FeatureLayerCollection.fromitem(selected_layer)
                             
-                            # Overwrite the layer
-                            result = flc.manager.overwrite(temp_zip_path)
-                            
-                            if result:
-                                # Apply sharing settings
-                                apply_sharing_settings(selected_layer, sharing_level)
+                            if selected_sublayer and len(sublayers) > 1:
+                                # Update specific sublayer
+                                target_layer = selected_sublayer['layer']
                                 
-                                st.success("✅ Layer updated successfully!")
-                                st.info(f"**FeatureServer URL:** {selected_layer.url}")
-                                
-                                # Display layer details
-                                st.subheader("Updated Layer Details")
-                                col1, col2 = st.columns(2)
-                                with col1:
-                                    st.write(f"**Title:** {selected_layer.title}")
-                                    st.write(f"**Type:** {selected_layer.type}")
-                                    st.write(f"**Sharing:** {sharing_level}")
-                                with col2:
-                                    st.write(f"**Owner:** {selected_layer.owner}")
-                                    st.write(f"**Modified:** {selected_layer.modified}")
-                                    st.write(f"**ID:** {selected_layer.id}")
+                                # Truncate and append for sublayer update
+                                truncate_result = target_layer.manager.truncate()
+                                if truncate_result.get('success', False):
+                                    # Load new data and append
+                                    gdf = load_shapefile_data(uploaded_file)
+                                    if gdf is not None:
+                                        # Convert to features for append
+                                        features = []
+                                        for _, row in gdf.iterrows():
+                                            feature = {
+                                                'attributes': {col: val for col, val in row.items() if col != 'geometry'},
+                                                'geometry': json.loads(row['geometry'].__geo_interface__) if 'geometry' in row else None
+                                            }
+                                            features.append(feature)
+                                        
+                                        append_result = target_layer.edit_features(adds=features)
+                                        if all(r.get('success', False) for r in append_result.get('addResults', [])):
+                                            st.success(f"✅ Sublayer '{selected_sublayer['name']}' updated successfully!")
+                                        else:
+                                            st.error("Failed to append new features to sublayer")
+                                    else:
+                                        st.error("Failed to load shapefile data")
+                                else:
+                                    st.error("Failed to truncate sublayer")
                             else:
-                                st.error("Failed to update layer")
+                                # Update entire layer
+                                result = flc.manager.overwrite(temp_zip_path)
+                                
+                                if result:
+                                    st.success("✅ Layer updated successfully!")
+                                else:
+                                    st.error("Failed to update layer")
+                            
+                            # Apply sharing settings
+                            apply_sharing_settings(selected_layer, sharing_level)
+                            
+                            st.info(f"**FeatureServer URL:** {selected_layer.url}")
+                            
+                            # Display layer details
+                            st.subheader("Updated Layer Details")
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Title:** {selected_layer.title}")
+                                st.write(f"**Type:** {selected_layer.type}")
+                                st.write(f"**Sharing:** {sharing_level}")
+                            with col2:
+                                st.write(f"**Owner:** {selected_layer.owner}")
+                                st.write(f"**Modified:** {selected_layer.modified}")
+                                st.write(f"**ID:** {selected_layer.id}")
                                 
                 except Exception as e:
                     st.error(f"Error updating layer: {str(e)}")
@@ -207,111 +412,358 @@ def create_new_layer():
     """Create a new feature layer"""
     st.header("➕ Create New Layer")
     
-    with st.form("create_layer_form"):
-        # Layer title
-        layer_title = st.text_input(
-            "Layer Title",
-            help="Enter a title for the new feature layer"
-        )
-        
-        # File upload
-        uploaded_file = st.file_uploader(
-            "Upload Shapefile (.zip)",
-            type=['zip'],
-            help="Upload a .zip file containing the shapefile"
-        )
-        
-        # Sharing level
-        sharing_level = st.radio(
-            "Sharing Level",
-            options=["Private", "Organization", "Public"],
-            help="Set the sharing level for the new layer"
-        )
-        
-        # Web maps selection
-        web_maps = get_web_maps()
-        if web_maps:
-            selected_maps = st.multiselect(
-                "Add to Web Maps (Optional)",
-                options=[f"{wm.title} ({wm.id})" for wm in web_maps],
-                help="Select web maps to add this new layer to"
-            )
+    # Initialize session state for data editing
+    if 'shapefile_data' not in st.session_state:
+        st.session_state.shapefile_data = None
+    if 'edited_data' not in st.session_state:
+        st.session_state.edited_data = None
+    if 'show_editor' not in st.session_state:
+        st.session_state.show_editor = False
+    
+    # File upload section
+    st.subheader("Upload Shapefile")
+    uploaded_file = st.file_uploader(
+        "Upload Shapefile (.zip)",
+        type=['zip'],
+        help="Upload a .zip file containing the shapefile",
+        key="create_file_uploader"
+    )
+    
+    if uploaded_file:
+        # Validate zip file
+        is_valid, message = validate_zip_file(uploaded_file)
+        if not is_valid:
+            st.error(f"Invalid zip file: {message}")
         else:
-            selected_maps = []
-            st.info("No web maps found in your account")
+            st.success(f"Valid shapefile: {message}")
+            
+            # Load shapefile data
+            if st.button("Load and Preview Data", key="load_preview"):
+                with st.spinner("Loading shapefile data..."):
+                    gdf = load_shapefile_data(uploaded_file)
+                    if gdf is not None:
+                        st.session_state.shapefile_data = gdf
+                        st.session_state.show_editor = True
+                        st.success(f"Loaded {len(gdf)} features with {len(gdf.columns)} attributes")
+    
+    # Data editing section
+    if st.session_state.show_editor and st.session_state.shapefile_data is not None:
+        st.subheader("Edit Shapefile Data")
+        st.info("You can edit, add, or delete rows in the table below. Changes will be applied when creating the layer.")
         
-        create_button = st.form_submit_button("Create Layer", type="primary")
+        edited_df, changes = display_editable_table(st.session_state.shapefile_data)
+        st.session_state.edited_data = edited_df
         
-        if create_button:
-            if uploaded_file and layer_title:
-                # Validate zip file
-                is_valid, message = validate_zip_file(uploaded_file)
-                if not is_valid:
-                    st.error(f"Invalid zip file: {message}")
-                    return
-                
-                try:
-                    with st.spinner("Creating new layer..."):
-                        # Save uploaded file to temporary location
-                        with tempfile.TemporaryDirectory() as temp_dir:
-                            temp_zip_path = os.path.join(temp_dir, "new_layer.zip")
-                            with open(temp_zip_path, "wb") as f:
-                                f.write(uploaded_file.getbuffer())
-                            
-                            # Add the zip file as an item
-                            zip_item = st.session_state.gis.content.add({
-                                'title': layer_title,
-                                'type': 'Shapefile'
-                            }, data=temp_zip_path)
-                            
-                            # Publish as feature layer
-                            feature_layer = zip_item.publish()
-                            
-                            # Apply sharing settings
-                            apply_sharing_settings(feature_layer, sharing_level)
-                            
-                            # Add to web maps if selected
-                            if selected_maps:
-                                for map_title in selected_maps:
-                                    map_id = map_title.split('(')[-1].replace(')', '')
-                                    try:
-                                        web_map = st.session_state.gis.content.get(map_id)
-                                        # Add layer to web map
-                                        web_map_obj = web_map.get_data()
-                                        web_map_obj['operationalLayers'].append({
-                                            'id': feature_layer.id,
-                                            'title': feature_layer.title,
-                                            'url': feature_layer.url,
-                                            'layerType': 'ArcGISFeatureLayer',
-                                            'visibility': True
-                                        })
-                                        web_map.update(data=web_map_obj)
-                                        st.success(f"Added to web map: {web_map.title}")
-                                    except Exception as e:
-                                        st.warning(f"Could not add to web map {map_title}: {str(e)}")
-                            
-                            st.success("✅ New layer created successfully!")
-                            st.info(f"**FeatureServer URL:** {feature_layer.url}")
-                            
-                            # Display layer details
-                            st.subheader("New Layer Details")
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.write(f"**Title:** {feature_layer.title}")
-                                st.write(f"**Type:** {feature_layer.type}")
-                                st.write(f"**Sharing:** {sharing_level}")
-                            with col2:
-                                st.write(f"**Owner:** {feature_layer.owner}")
-                                st.write(f"**Created:** {feature_layer.created}")
-                                st.write(f"**ID:** {feature_layer.id}")
-                            
-                            # Clean up the temporary zip item
-                            zip_item.delete()
-                            
-                except Exception as e:
-                    st.error(f"Error creating layer: {str(e)}")
+        if changes and (changes['added'] or changes['deleted'] or changes['modified']):
+            st.info(f"Changes detected: {len(changes['added'])} added, {len(changes['modified'])} modified, {len(changes['deleted'])} deleted")
+    
+    # Layer creation form
+    if st.session_state.shapefile_data is not None:
+        st.subheader("Create Layer")
+        with st.form("create_layer_form"):
+            # Layer title
+            layer_title = st.text_input(
+                "Layer Title",
+                help="Enter a title for the new feature layer"
+            )
+            
+            # Sharing level
+            sharing_level = st.radio(
+                "Sharing Level",
+                options=["Private", "Organization", "Public"],
+                help="Set the sharing level for the new layer"
+            )
+            
+            # Web maps selection
+            web_maps = get_web_maps()
+            if web_maps:
+                selected_maps = st.multiselect(
+                    "Add to Web Maps (Optional)",
+                    options=[f"{wm.title} ({wm.id})" for wm in web_maps],
+                    help="Select web maps to add this new layer to"
+                )
             else:
-                st.warning("Please enter a layer title and upload a zip file")
+                selected_maps = []
+                st.info("No web maps found in your account")
+            
+            create_button = st.form_submit_button("Create Layer", type="primary")
+            
+            if create_button:
+                if layer_title:
+                    try:
+                        with st.spinner("Creating new layer..."):
+                            # Use edited data if available, otherwise use original data
+                            data_to_use = st.session_state.edited_data if st.session_state.edited_data is not None else st.session_state.shapefile_data
+                            
+                            # Convert edited data back to GeoDataFrame if needed
+                            if 'geometry' in data_to_use.columns and isinstance(data_to_use['geometry'].iloc[0], str):
+                                from shapely import wkt
+                                data_to_use = data_to_use.copy()
+                                data_to_use['geometry'] = data_to_use['geometry'].apply(wkt.loads)
+                                data_to_use = gpd.GeoDataFrame(data_to_use, geometry='geometry')
+                            
+                            # Save edited data to temporary shapefile
+                            with tempfile.TemporaryDirectory() as temp_dir:
+                                temp_shp_path = os.path.join(temp_dir, "edited_layer.shp")
+                                data_to_use.to_file(temp_shp_path)
+                                
+                                # Create zip from edited shapefile
+                                temp_zip_path = os.path.join(temp_dir, "edited_layer.zip")
+                                with zipfile.ZipFile(temp_zip_path, 'w') as zipf:
+                                    for ext in ['.shp', '.shx', '.dbf', '.prj']:
+                                        file_path = temp_shp_path.replace('.shp', ext)
+                                        if os.path.exists(file_path):
+                                            zipf.write(file_path, f"edited_layer{ext}")
+                                
+                                # Add the zip file as an item
+                                zip_item = st.session_state.gis.content.add({
+                                    'title': layer_title,
+                                    'type': 'Shapefile'
+                                }, data=temp_zip_path)
+                                
+                                # Publish as feature layer
+                                feature_layer = zip_item.publish()
+                                
+                                # Apply sharing settings
+                                apply_sharing_settings(feature_layer, sharing_level)
+                                
+                                # Add to web maps if selected
+                                if selected_maps:
+                                    for map_title in selected_maps:
+                                        map_id = map_title.split('(')[-1].replace(')', '')
+                                        try:
+                                            web_map = st.session_state.gis.content.get(map_id)
+                                            # Add layer to web map
+                                            web_map_obj = web_map.get_data()
+                                            web_map_obj['operationalLayers'].append({
+                                                'id': feature_layer.id,
+                                                'title': feature_layer.title,
+                                                'url': feature_layer.url,
+                                                'layerType': 'ArcGISFeatureLayer',
+                                                'visibility': True
+                                            })
+                                            web_map.update(data=web_map_obj)
+                                            st.success(f"Added to web map: {web_map.title}")
+                                        except Exception as e:
+                                            st.warning(f"Could not add to web map {map_title}: {str(e)}")
+                                
+                                st.success("✅ New layer created successfully!")
+                                st.info(f"**FeatureServer URL:** {feature_layer.url}")
+                                
+                                # Display layer details
+                                st.subheader("New Layer Details")
+                                col1, col2 = st.columns(2)
+                                with col1:
+                                    st.write(f"**Title:** {feature_layer.title}")
+                                    st.write(f"**Type:** {feature_layer.type}")
+                                    st.write(f"**Sharing:** {sharing_level}")
+                                with col2:
+                                    st.write(f"**Owner:** {feature_layer.owner}")
+                                    st.write(f"**Created:** {feature_layer.created}")
+                                    st.write(f"**ID:** {feature_layer.id}")
+                                
+                                # Clean up the temporary zip item
+                                zip_item.delete()
+                                
+                                # Reset session state
+                                st.session_state.shapefile_data = None
+                                st.session_state.edited_data = None
+                                st.session_state.show_editor = False
+                                
+                    except Exception as e:
+                        st.error(f"Error creating layer: {str(e)}")
+                else:
+                    st.warning("Please enter a layer title")
+    elif uploaded_file is None:
+        st.info("Please upload a shapefile to begin creating a new layer")
+
+def edit_layer_data():
+    """Edit existing layer data"""
+    st.header("✏️ Edit Layer Data")
+    
+    # Get existing feature layers
+    feature_layers = get_feature_layers()
+    
+    if not feature_layers:
+        st.warning("No feature layers found in your account")
+        return
+    
+    # Create layer selection options
+    layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+    
+    # Layer selection
+    selected_layer_key = st.selectbox(
+        "Select Feature Layer to Edit",
+        options=list(layer_options.keys()),
+        help="Choose the feature layer you want to edit",
+        key="edit_layer_selector"
+    )
+    
+    if not selected_layer_key:
+        return
+        
+    selected_layer = layer_options[selected_layer_key]
+    
+    # Get sublayers if available
+    sublayers = get_layer_sublayers(selected_layer)
+    selected_sublayer = None
+    
+    if len(sublayers) > 1:
+        st.subheader("Sublayer Selection")
+        sublayer_options = {f"{sub['name']} (ID: {sub['id']})": sub for sub in sublayers}
+        selected_sublayer_key = st.selectbox(
+            "Select Sublayer to Edit",
+            options=list(sublayer_options.keys()),
+            help="Choose the specific sublayer to edit",
+            key="edit_sublayer_selector"
+        )
+        selected_sublayer = sublayer_options[selected_sublayer_key] if selected_sublayer_key else None
+    elif len(sublayers) == 1:
+        selected_sublayer = sublayers[0]
+        st.info(f"Editing sublayer: {selected_sublayer['name']}")
+    
+    if selected_sublayer:
+        target_layer = selected_sublayer['layer']
+        
+        # Load current layer data
+        if st.button("Load Current Layer Data", key="load_layer_data"):
+            try:
+                with st.spinner("Loading layer data..."):
+                    # Query features from the layer
+                    feature_set = target_layer.query()
+                    features = feature_set.features
+                    
+                    if features:
+                        # Convert to DataFrame
+                        data_rows = []
+                        for feature in features:
+                            row = feature.attributes.copy()
+                            if feature.geometry:
+                                row['geometry'] = str(feature.geometry)
+                            data_rows.append(row)
+                        
+                        df = pd.DataFrame(data_rows)
+                        st.session_state.current_layer_data = df
+                        st.session_state.target_layer = target_layer
+                        st.success(f"Loaded {len(df)} features from layer")
+                    else:
+                        st.warning("No features found in this layer")
+                        
+            except Exception as e:
+                st.error(f"Error loading layer data: {str(e)}")
+        
+        # Display editable data if loaded
+        if 'current_layer_data' in st.session_state and st.session_state.current_layer_data is not None:
+            st.subheader("Edit Layer Features")
+            st.info("Edit the data below. Changes will be applied directly to the ArcGIS Online layer.")
+            
+            # Display editable table
+            edited_df = st.data_editor(
+                st.session_state.current_layer_data,
+                num_rows="dynamic",
+                use_container_width=True,
+                key="layer_data_editor"
+            )
+            
+            # Apply changes button
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Apply Changes to Layer", type="primary", key="apply_changes"):
+                    try:
+                        with st.spinner("Applying changes to layer..."):
+                            # Detect changes
+                            original_df = st.session_state.current_layer_data
+                            
+                            # Find added rows
+                            added_rows = []
+                            if len(edited_df) > len(original_df):
+                                added_rows = edited_df.iloc[len(original_df):].to_dict('records')
+                            
+                            # Find deleted rows
+                            deleted_rows = []
+                            if len(edited_df) < len(original_df):
+                                deleted_indices = set(original_df.index) - set(edited_df.index)
+                                deleted_rows = [original_df.loc[idx] for idx in deleted_indices]
+                            
+                            # Find modified rows
+                            modified_rows = []
+                            for idx in edited_df.index:
+                                if idx < len(original_df):
+                                    if not edited_df.loc[idx].equals(original_df.loc[idx]):
+                                        modified_rows.append(edited_df.loc[idx].to_dict())
+                            
+                            # Apply changes using ArcGIS API
+                            success_count = 0
+                            total_operations = len(added_rows) + len(deleted_rows) + len(modified_rows)
+                            
+                            if added_rows:
+                                # Add new features
+                                new_features = []
+                                for row in added_rows:
+                                    feature_dict = {
+                                        'attributes': {k: v for k, v in row.items() if k != 'geometry'}
+                                    }
+                                    if 'geometry' in row and row['geometry']:
+                                        try:
+                                            # Parse geometry if it's a string
+                                            from shapely import wkt
+                                            geom = wkt.loads(row['geometry'])
+                                            feature_dict['geometry'] = json.loads(geom.__geo_interface__)
+                                        except:
+                                            pass
+                                    new_features.append(feature_dict)
+                                
+                                if new_features:
+                                    result = target_layer.edit_features(adds=new_features)
+                                    success_count += sum(1 for r in result.get('addResults', []) if r.get('success', False))
+                            
+                            if modified_rows:
+                                # Update existing features
+                                update_features = []
+                                for row in modified_rows:
+                                    feature_dict = {
+                                        'attributes': {k: v for k, v in row.items() if k != 'geometry'}
+                                    }
+                                    if 'geometry' in row and row['geometry']:
+                                        try:
+                                            from shapely import wkt
+                                            geom = wkt.loads(row['geometry'])
+                                            feature_dict['geometry'] = json.loads(geom.__geo_interface__)
+                                        except:
+                                            pass
+                                    update_features.append(feature_dict)
+                                
+                                if update_features:
+                                    result = target_layer.edit_features(updates=update_features)
+                                    success_count += sum(1 for r in result.get('updateResults', []) if r.get('success', False))
+                            
+                            if deleted_rows:
+                                # Delete features by OBJECTID
+                                delete_oids = []
+                                for row in deleted_rows:
+                                    if 'OBJECTID' in row:
+                                        delete_oids.append(row['OBJECTID'])
+                                
+                                if delete_oids:
+                                    where_clause = f"OBJECTID IN ({','.join(map(str, delete_oids))})"
+                                    result = target_layer.delete_features(where=where_clause)
+                                    success_count += sum(1 for r in result.get('deleteResults', []) if r.get('success', False))
+                            
+                            if total_operations > 0:
+                                st.success(f"Successfully applied {success_count}/{total_operations} changes to the layer!")
+                                # Refresh the data
+                                st.session_state.current_layer_data = None
+                                st.rerun()
+                            else:
+                                st.info("No changes detected")
+                                
+                    except Exception as e:
+                        st.error(f"Error applying changes: {str(e)}")
+            
+            with col2:
+                if st.button("Refresh Data", key="refresh_data"):
+                    st.session_state.current_layer_data = None
+                    st.rerun()
 
 def view_content():
     """Display user's existing content"""
@@ -376,7 +828,7 @@ def main():
     st.sidebar.header("Navigation")
     page = st.sidebar.selectbox(
         "Select Action",
-        ["View Content", "Update Existing Layer", "Create New Layer"]
+        ["View Content", "Update Existing Layer", "Create New Layer", "Edit Layer Data"]
     )
     
     # Display selected page
@@ -386,6 +838,8 @@ def main():
         update_existing_layer()
     elif page == "Create New Layer":
         create_new_layer()
+    elif page == "Edit Layer Data":
+        edit_layer_data()
 
 if __name__ == "__main__":
     main()
