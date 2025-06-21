@@ -13,6 +13,9 @@ from datetime import datetime
 import time
 import io
 import base64
+import requests
+from bs4 import BeautifulSoup
+import re
 
 # Page configuration
 st.set_page_config(
@@ -235,6 +238,313 @@ def validate_coordinate_system(gdf, target_layer=None):
                 return gdf, False
     
     return gdf, True
+
+def authenticate_irth(username, password):
+    """Authenticate with irth utilitsphere and return session"""
+    session = requests.Session()
+    
+    try:
+        # Get login page to retrieve any required tokens
+        login_url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
+        login_page = session.get(login_url, timeout=10)
+        
+        if login_page.status_code != 200:
+            return None, "Unable to access irth login page"
+        
+        # Parse for any form tokens or viewstate
+        soup = BeautifulSoup(login_page.content, 'html.parser')
+        
+        # Prepare login data (this may need adjustment based on actual form structure)
+        login_data = {
+            'username': username,
+            'password': password
+        }
+        
+        # Look for common form fields
+        for input_field in soup.find_all('input', type='hidden'):
+            name = input_field.get('name')
+            value = input_field.get('value', '')
+            if name:
+                login_data[name] = value
+        
+        # Attempt login
+        response = session.post(login_url, data=login_data, timeout=10)
+        
+        # Check if login was successful (adjust based on actual response)
+        if "ManageMapLayers" in response.url or response.status_code == 200:
+            return session, None
+        else:
+            return None, "Authentication failed - please check credentials"
+            
+    except requests.RequestException as e:
+        return None, f"Connection error: {str(e)}"
+    except Exception as e:
+        return None, f"Authentication error: {str(e)}"
+
+def get_irth_map_layers(session):
+    """Retrieve map layer URLs from irth utilitsphere"""
+    try:
+        url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
+        response = session.get(url, timeout=10)
+        
+        if response.status_code != 200:
+            return [], "Unable to access map layers page"
+        
+        soup = BeautifulSoup(response.content, 'html.parser')
+        layers = []
+        
+        # Look for tables or divs containing layer information
+        # This parsing logic may need adjustment based on actual page structure
+        tables = soup.find_all('table')
+        for table in tables:
+            rows = table.find_all('tr')
+            for row in rows[1:]:  # Skip header row
+                cells = row.find_all(['td', 'th'])
+                if len(cells) >= 2:
+                    # Extract layer information
+                    layer_name = cells[0].get_text(strip=True)
+                    layer_url = cells[1].get_text(strip=True)
+                    
+                    # Look for URLs that contain "FeatureServer" or similar patterns
+                    if layer_url and ('http' in layer_url.lower() or 'featureserver' in layer_url.lower()):
+                        layers.append({
+                            'name': layer_name,
+                            'url': layer_url,
+                            'id': len(layers) + 1
+                        })
+        
+        # If no table structure found, try alternative parsing
+        if not layers:
+            # Look for input fields or other elements containing URLs
+            inputs = soup.find_all('input')
+            for inp in inputs:
+                value = inp.get('value', '')
+                if 'featureserver' in value.lower() or 'mapserver' in value.lower():
+                    layers.append({
+                        'name': inp.get('name', f'Layer_{len(layers)+1}'),
+                        'url': value,
+                        'id': len(layers) + 1
+                    })
+        
+        return layers, None
+        
+    except requests.RequestException as e:
+        return [], f"Connection error: {str(e)}"
+    except Exception as e:
+        return [], f"Error retrieving layers: {str(e)}"
+
+def update_irth_layer_url(session, layer_id, new_url, layer_name=None):
+    """Update a specific layer URL in irth utilitsphere"""
+    try:
+        url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
+        
+        # Get the current page to retrieve form data
+        page_response = session.get(url, timeout=10)
+        soup = BeautifulSoup(page_response.content, 'html.parser')
+        
+        # Prepare update data
+        update_data = {}
+        
+        # Preserve hidden form fields
+        for input_field in soup.find_all('input', type='hidden'):
+            name = input_field.get('name')
+            value = input_field.get('value', '')
+            if name:
+                update_data[name] = value
+        
+        # Add the new URL data (field names may need adjustment)
+        if layer_name:
+            update_data[f'layer_{layer_id}_name'] = layer_name
+        update_data[f'layer_{layer_id}_url'] = new_url
+        update_data['action'] = 'update'
+        update_data['layer_id'] = str(layer_id)
+        
+        # Submit the update
+        response = session.post(url, data=update_data, timeout=10)
+        
+        if response.status_code == 200:
+            # Check for success indicators in the response
+            if "success" in response.text.lower() or "updated" in response.text.lower():
+                return True, "Layer URL updated successfully"
+            else:
+                return False, "Update submitted but success not confirmed"
+        else:
+            return False, f"Update failed with status code: {response.status_code}"
+            
+    except requests.RequestException as e:
+        return False, f"Connection error: {str(e)}"
+    except Exception as e:
+        return False, f"Update error: {str(e)}"
+
+def irth_integration():
+    """irth utilitsphere integration interface"""
+    st.header("🔗 irth Integration")
+    
+    st.write("""
+    This section allows you to view and update map layer URLs in irth utilitsphere directly from the ArcGISLayerUpdater app.
+    
+    **Requirements:**
+    - Your irth credentials must have administrative access to Manage Map Layers
+    - For manual verification, visit: [irth Manage Map Layers](https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx)
+    """)
+    
+    # irth Authentication Section
+    st.subheader("🔐 irth Authentication")
+    
+    with st.form("irth_auth_form"):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            irth_username = st.text_input(
+                "irth Username",
+                help="Enter your irth utilitsphere username"
+            )
+        
+        with col2:
+            irth_password = st.text_input(
+                "irth Password",
+                type="password",
+                help="Enter your irth utilitsphere password"
+            )
+        
+        authenticate_button = st.form_submit_button("Authenticate with irth", type="primary")
+        
+        if authenticate_button:
+            if irth_username and irth_password:
+                with st.spinner("Authenticating with irth utilitsphere..."):
+                    session, error = authenticate_irth(irth_username, irth_password)
+                    
+                    if session:
+                        st.session_state.irth_session = session
+                        st.session_state.irth_authenticated = True
+                        st.success("Successfully authenticated with irth utilitsphere!")
+                    else:
+                        st.error(f"Authentication failed: {error}")
+                        st.session_state.irth_authenticated = False
+            else:
+                st.warning("Please enter both username and password")
+    
+    # Display irth Map Layers (if authenticated)
+    if st.session_state.get('irth_authenticated', False) and 'irth_session' in st.session_state:
+        st.subheader("📋 View irth Map Layer URLs")
+        
+        if st.button("Refresh irth Layer List", type="secondary"):
+            with st.spinner("Retrieving irth map layers..."):
+                layers, error = get_irth_map_layers(st.session_state.irth_session)
+                
+                if error:
+                    st.error(f"Error retrieving layers: {error}")
+                else:
+                    st.session_state.irth_layers = layers
+        
+        # Display current irth layers
+        if 'irth_layers' in st.session_state and st.session_state.irth_layers:
+            st.write("**Current irth Map Layers:**")
+            df = pd.DataFrame(st.session_state.irth_layers)
+            st.dataframe(df, use_container_width=True)
+        else:
+            st.info("Click 'Refresh irth Layer List' to load current map layers")
+        
+        # Update irth Map Layer URLs
+        st.subheader("🔄 Update irth Map Layer URLs")
+        
+        # Get ArcGIS feature layers
+        feature_layers = get_feature_layers()
+        
+        if feature_layers:
+            with st.form("update_irth_form"):
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Select ArcGIS layer
+                    arcgis_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+                    selected_arcgis_key = st.selectbox(
+                        "Select ArcGIS Online Feature Layer",
+                        options=list(arcgis_options.keys()),
+                        help="Choose the ArcGIS layer whose URL you want to sync with irth"
+                    )
+                    
+                    if selected_arcgis_key:
+                        selected_arcgis_layer = arcgis_options[selected_arcgis_key]
+                        st.info(f"FeatureServer URL: {selected_arcgis_layer.url}")
+                
+                with col2:
+                    # irth layer identification
+                    irth_layer_id = st.text_input(
+                        "irth Layer ID or Name",
+                        help="Enter the irth layer ID or name to update"
+                    )
+                    
+                    irth_layer_name = st.text_input(
+                        "irth Layer Display Name (Optional)",
+                        help="Optional: Update the display name for the layer"
+                    )
+                
+                update_irth_button = st.form_submit_button("Sync URL with irth", type="primary")
+                
+                if update_irth_button:
+                    if selected_arcgis_key and irth_layer_id:
+                        selected_layer = arcgis_options[selected_arcgis_key]
+                        new_url = selected_layer.url
+                        
+                        with st.spinner("Updating irth layer URL..."):
+                            success, message = update_irth_layer_url(
+                                st.session_state.irth_session,
+                                irth_layer_id,
+                                new_url,
+                                irth_layer_name
+                            )
+                            
+                            if success:
+                                st.success(message)
+                                st.info(f"Updated irth layer '{irth_layer_id}' with URL: {new_url}")
+                                
+                                # Generate update log for IRTH integration
+                                update_info = {
+                                    'timestamp': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+                                    'arcgis_layer': selected_layer.title,
+                                    'arcgis_id': selected_layer.id,
+                                    'irth_layer_id': irth_layer_id,
+                                    'new_url': new_url,
+                                    'status': 'success'
+                                }
+                                
+                                # Offer download of update log
+                                log_df = pd.DataFrame([update_info])
+                                csv_data = log_df.to_csv(index=False)
+                                
+                                st.download_button(
+                                    label="Download Update Log (CSV)",
+                                    data=csv_data,
+                                    file_name=f"irth_update_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv"
+                                )
+                            else:
+                                st.error(message)
+                    else:
+                        st.warning("Please select an ArcGIS layer and enter an irth layer ID")
+        else:
+            st.warning("No ArcGIS feature layers found. Please ensure you're authenticated with ArcGIS Online.")
+        
+        # Manual verification section
+        st.subheader("🔍 Manual Verification")
+        st.write("""
+        To manually verify the updates:
+        1. Visit the [irth Manage Map Layers page](https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx)
+        2. Check that the layer URLs have been updated correctly
+        3. Test the layer functionality in your irth applications
+        """)
+        
+        # Logout button
+        if st.button("Logout from irth", type="secondary"):
+            if 'irth_session' in st.session_state:
+                del st.session_state.irth_session
+            st.session_state.irth_authenticated = False
+            st.info("Logged out from irth utilitsphere")
+            st.rerun()
+    
+    else:
+        st.info("Please authenticate with irth utilitsphere to view and update map layers")
 
 def apply_sharing_settings(item, sharing_level):
     """Apply sharing settings to an item"""
@@ -1431,7 +1741,7 @@ def main():
     st.sidebar.header("Navigation")
     page = st.sidebar.selectbox(
         "Select Action",
-        ["View Content", "Update Existing Layer", "Create New Layer", "Edit Layer Data", "Settings"]
+        ["View Content", "Update Existing Layer", "Create New Layer", "Edit Layer Data", "irth Integration", "Settings"]
     )
     
     # Display selected page
@@ -1443,6 +1753,8 @@ def main():
         create_new_layer()
     elif page == "Edit Layer Data":
         edit_layer_data()
+    elif page == "irth Integration":
+        irth_integration()
     elif page == "Settings":
         user_settings()
 

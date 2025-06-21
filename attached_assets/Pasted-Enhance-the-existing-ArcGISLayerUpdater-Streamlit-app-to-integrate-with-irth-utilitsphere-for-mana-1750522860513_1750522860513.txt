@@ -1,0 +1,22 @@
+Enhance the existing 'ArcGISLayerUpdater' Streamlit app to integrate with irth utilitsphere for managing map layer URLs, while preserving all current functionality (authentication with ArcGIS Online, viewing/updating/creating feature layers, table editing, sublayer updates, sharing settings, and FeatureServer URL generation). The app should run locally using Streamlit and the ArcGIS API for Python. Add these specific enhancements:
+
+View irth Map Layer URLs:
+After authenticating with ArcGIS Online, add a new section to display a list of map layer URLs currently configured in irth utilitsphere.
+Since the irth interface at [https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx] requires login, provide an option for users to manually input their irth credentials (username and password via st.text_input, with password as type='password') to authenticate and retrieve the list of map layers.
+Use a basic web scraping or API simulation approach (e.g., requests with session handling) to access the page after login, parse the HTML for layer URLs (assuming they are listed in a table or similar structure), and display them in a st.dataframe.
+Update irth Map Layer URLs:
+Allow users to select an ArcGIS Online feature layer (from the existing list) and update its FeatureServer URL in irth’s map layer settings.
+After updating or creating a feature layer in ArcGIS Online, provide a button (st.button) to sync the new FeatureServer URL with irth.
+Simulate a form submission or API call to the irth Manage Map Layers page (e.g., using requests to POST the updated URL), requiring users to input the corresponding irth layer ID or name (via st.text_input) to match the ArcGIS layer.
+Display a success message (st.success) if the update is detected (e.g., via page response or manual confirmation), or an error (st.error) if it fails.
+Error Handling and Feedback:
+Include robust error handling for irth authentication failures, invalid URLs, or page access issues, with clear messages using st.error or st.warning.
+Add a progress spinner (st.spinner) during irth URL retrieval or updates to indicate processing.
+User Guidance:
+Add a note in the irth section (e.g., st.write) instructing users to ensure their irth credentials have administrative access to Manage Map Layers.
+Include a link to [https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx] for manual verification.
+General Improvements:
+Organize the new irth functionality in a dedicated section (e.g., "irth Integration") below existing sections.
+Ensure compatibility with the app’s current file handling, temporary directories, and session state management.
+Avoid duplicating existing ArcGIS Online logic; focus solely on irth interaction.
+This enhancement will enable users to view and update map layer URLs in irth utilitsphere directly from the app, streamlining integration with their ArcGIS Online workflow.
