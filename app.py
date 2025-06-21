@@ -693,10 +693,12 @@ def create_new_layer():
                 help="Enter a title for the new feature layer"
             )
             
-            # Sharing level
+            # Sharing level - use default from settings
+            default_sharing = st.session_state.user_settings.get('default_sharing_level', 'Private')
             sharing_level = st.radio(
                 "Sharing Level",
                 options=["Private", "Organization", "Public"],
+                index=["Private", "Organization", "Public"].index(default_sharing),
                 help="Set the sharing level for the new layer"
             )
             
@@ -730,7 +732,8 @@ def create_new_layer():
                             
                             # Save edited data to temporary shapefile
                             with tempfile.TemporaryDirectory() as temp_dir:
-                                temp_shp_path = os.path.join(temp_dir, "edited_layer.shp")
+                                import pathlib
+                                temp_shp_path = str(pathlib.Path(temp_dir) / "edited_layer.shp")
                                 data_to_use.to_file(temp_shp_path)
                                 
                                 # Create zip from edited shapefile
@@ -776,7 +779,19 @@ def create_new_layer():
                                 st.success("✅ New layer created successfully!")
                                 st.info(f"**FeatureServer URL:** {feature_layer.url}")
                                 
-                                # Display layer details
+                                # Generate IRTH export
+                                layer_info = {
+                                    'title': feature_layer.title,
+                                    'id': feature_layer.id,
+                                    'url': feature_layer.url,
+                                    'owner': feature_layer.owner,
+                                    'sharing': sharing_level
+                                }
+                                
+                                irth_df = generate_irth_export(layer_info, "create")
+                                csv_data = irth_df.to_csv(index=False)
+                                
+                                # Display layer details with IRTH download
                                 st.subheader("New Layer Details")
                                 col1, col2 = st.columns(2)
                                 with col1:
@@ -787,6 +802,16 @@ def create_new_layer():
                                     st.write(f"**Owner:** {feature_layer.owner}")
                                     st.write(f"**Created:** {feature_layer.created}")
                                     st.write(f"**ID:** {feature_layer.id}")
+                                
+                                # IRTH integration download
+                                st.subheader("IRTH Integration")
+                                st.download_button(
+                                    label="📥 Download IRTH Export (CSV)",
+                                    data=csv_data,
+                                    file_name=f"irth_export_{feature_layer.title}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv",
+                                    help="Download layer metadata for IRTH system integration"
+                                )
                                 
                                 # Clean up the temporary zip item
                                 zip_item.delete()
