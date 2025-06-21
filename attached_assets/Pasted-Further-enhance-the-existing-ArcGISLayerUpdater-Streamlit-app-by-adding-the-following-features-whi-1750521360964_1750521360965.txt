@@ -1,0 +1,23 @@
+Further enhance the existing 'ArcGISLayerUpdater' Streamlit app by adding the following features while preserving all previous functionality (authentication, viewing existing feature layers, updating/creating layers, managing sharing settings, generating FeatureServer URLs, editing/deleting table contents, and updating individual sublayers). The app should continue to run locally using Streamlit and the ArcGIS API for Python. Add these enhancements:
+
+Improved Table Editing Interface:
+Enhance the attribute table display with a more interactive interface, allowing row-by-row editing using st.form or a custom edit button per row (e.g., st.button('Edit') or st.button('Delete')).
+Provide a confirmation dialog (e.g., st.warning with a confirm button) before deleting rows to prevent accidental data loss.
+Apply edits and deletions to the feature layer using the ArcGIS API’s edit_features method, ensuring real-time updates in ArcGIS Online.
+Progress and Performance Optimization:
+Add a progress bar (st.progress) and status messages during table edits, sublayer updates, and large file uploads to improve user feedback.
+Implement chunked processing for large shapefiles or tables (e.g., using batch operations with edit_features) to handle performance issues with large datasets.
+Enhanced Validation and Feedback:
+Validate coordinate systems of uploaded .shp files against the target layer or sublayer, displaying a warning (st.warning) if mismatched and offering an option to reproject using arcgis.geometry.project.
+Provide a preview of changes (e.g., edited/deleted rows) before committing, using a side-by-side comparison with st.columns.
+Integration with irth Ticketing System:
+After updating or creating a layer, automatically generate a CSV file containing the FeatureServer URL and layer metadata (e.g., title, update date) using pandas, downloadable via st.download_button for easy import into irth.
+Include an optional field in the settings to specify an irth-specific ID or tag to associate with the layer.
+User Settings Persistence:
+Add a settings section to save user preferences (e.g., default sharing level, irth ID) using Streamlit secrets or a local JSON file, accessible via st.session_state.
+Allow users to load and save these settings with buttons (e.g., st.button('Save Settings')).
+General Improvements:
+Ensure the app remains organized with clear sections for authentication, layer management, table editing, and settings.
+Update error handling to cover new operations, displaying detailed messages with st.error or st.warning as needed.
+Maintain file handling with temporary directories and cleanup after processing.
+These enhancements will improve the app’s usability, performance, and integration with irth, making it a more robust tool for managing ArcGIS Online feature layers.

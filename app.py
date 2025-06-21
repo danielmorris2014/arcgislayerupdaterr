@@ -5,9 +5,14 @@ import zipfile
 import geopandas as gpd
 from arcgis.gis import GIS
 from arcgis.features import FeatureLayerCollection, FeatureLayer
+from arcgis import geometry as arcgis_geometry
 import pandas as pd
 import json
 from typing import Dict, List, Any
+from datetime import datetime
+import time
+import io
+import base64
 
 # Page configuration
 st.set_page_config(
@@ -21,6 +26,13 @@ if 'gis' not in st.session_state:
     st.session_state.gis = None
 if 'authenticated' not in st.session_state:
     st.session_state.authenticated = False
+if 'user_settings' not in st.session_state:
+    st.session_state.user_settings = {
+        'default_sharing_level': 'Private',
+        'irth_id': '',
+        'batch_size': 1000,
+        'auto_reproject': True
+    }
 
 def authenticate():
     """Handle ArcGIS Online authentication"""
@@ -103,6 +115,58 @@ def validate_zip_file(zip_file):
     except Exception as e:
         return False, f"Error validating zip file: {str(e)}"
 
+def load_user_settings():
+    """Load user settings from file or session state"""
+    settings_file = "user_settings.json"
+    try:
+        if os.path.exists(settings_file):
+            with open(settings_file, 'r') as f:
+                loaded_settings = json.load(f)
+                st.session_state.user_settings.update(loaded_settings)
+    except Exception:
+        pass  # Use default settings
+    return st.session_state.user_settings
+
+def save_user_settings():
+    """Save user settings to file"""
+    settings_file = "user_settings.json"
+    try:
+        with open(settings_file, 'w') as f:
+            json.dump(st.session_state.user_settings, f)
+        return True
+    except Exception as e:
+        st.error(f"Error saving settings: {str(e)}")
+        return False
+
+def validate_coordinate_system(gdf, target_layer=None):
+    """Validate and offer reprojection for coordinate systems"""
+    try:
+        source_crs = gdf.crs
+        if target_layer:
+            # Get target layer CRS
+            target_crs_info = target_layer.properties.get('spatialReference', {})
+            target_wkid = target_crs_info.get('wkid', 4326)
+            
+            if source_crs and source_crs.to_epsg() != target_wkid:
+                st.warning(f"Coordinate system mismatch: Source ({source_crs.to_epsg()}) vs Target ({target_wkid})")
+                
+                if st.session_state.user_settings.get('auto_reproject', True):
+                    if st.button("Reproject to match target layer"):
+                        try:
+                            gdf = gdf.to_crs(f"EPSG:{target_wkid}")
+                            st.success(f"Reprojected to EPSG:{target_wkid}")
+                            return gdf, True
+                        except Exception as e:
+                            st.error(f"Reprojection failed: {str(e)}")
+                            return gdf, False
+                else:
+                    st.info("Auto-reprojection disabled in settings")
+                    
+        return gdf, True
+    except Exception as e:
+        st.error(f"Error validating coordinate system: {str(e)}")
+        return gdf, False
+
 def apply_sharing_settings(item, sharing_level):
     """Apply sharing settings to an item"""
     try:
@@ -115,6 +179,70 @@ def apply_sharing_settings(item, sharing_level):
     except Exception as e:
         st.error(f"Error applying sharing settings: {str(e)}")
         return False
+
+def generate_irth_export(layer_info, operation_type="update"):
+    """Generate CSV export for irth integration"""
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+    export_data = {
+        'operation_type': [operation_type],
+        'layer_title': [layer_info.get('title', '')],
+        'layer_id': [layer_info.get('id', '')],
+        'feature_server_url': [layer_info.get('url', '')],
+        'owner': [layer_info.get('owner', '')],
+        'sharing_level': [layer_info.get('sharing', 'Private')],
+        'timestamp': [timestamp],
+        'irth_id': [st.session_state.user_settings.get('irth_id', '')]
+    }
+    
+    df = pd.DataFrame(export_data)
+    return df
+
+def batch_edit_features(layer, features, operation='add', batch_size=None):
+    """Apply edits in batches for better performance"""
+    if not batch_size:
+        batch_size = st.session_state.user_settings.get('batch_size', 1000)
+    
+    total_features = len(features)
+    success_count = 0
+    
+    # Create progress bar
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    for i in range(0, total_features, batch_size):
+        batch = features[i:i + batch_size]
+        batch_num = (i // batch_size) + 1
+        total_batches = (total_features + batch_size - 1) // batch_size
+        
+        status_text.text(f"Processing batch {batch_num}/{total_batches}...")
+        
+        try:
+            if operation == 'add':
+                result = layer.edit_features(adds=batch)
+                batch_success = sum(1 for r in result.get('addResults', []) if r.get('success', False))
+            elif operation == 'update':
+                result = layer.edit_features(updates=batch)
+                batch_success = sum(1 for r in result.get('updateResults', []) if r.get('success', False))
+            elif operation == 'delete':
+                # For delete, batch contains where clauses
+                result = layer.delete_features(where=batch)
+                batch_success = sum(1 for r in result.get('deleteResults', []) if r.get('success', False))
+            else:
+                batch_success = 0
+                
+            success_count += batch_success
+            
+        except Exception as e:
+            st.error(f"Error in batch {batch_num}: {str(e)}")
+        
+        # Update progress
+        progress = min((i + batch_size) / total_features, 1.0)
+        progress_bar.progress(progress)
+        time.sleep(0.1)  # Small delay for UI responsiveness
+    
+    status_text.text(f"Completed: {success_count}/{total_features} features processed successfully")
+    return success_count
 
 def get_layer_sublayers(feature_layer):
     """Get sublayers from a feature layer"""
@@ -157,8 +285,8 @@ def load_shapefile_data(zip_file):
         st.error(f"Error loading shapefile: {str(e)}")
         return None
 
-def display_editable_table(gdf):
-    """Display and edit feature data"""
+def display_enhanced_editable_table(gdf, key_suffix=""):
+    """Display enhanced table with row-by-row editing and confirmation dialogs"""
     if gdf is None or gdf.empty:
         st.warning("No data to display")
         return None, None
@@ -170,39 +298,128 @@ def display_editable_table(gdf):
     if 'geometry' in display_df.columns:
         display_df['geometry'] = display_df['geometry'].astype(str)
     
-    # Display data with editing capabilities
-    edited_df = st.data_editor(
-        display_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="feature_editor"
+    # Initialize session state for edit tracking
+    if f'editing_row_{key_suffix}' not in st.session_state:
+        st.session_state[f'editing_row_{key_suffix}'] = None
+    if f'delete_confirmation_{key_suffix}' not in st.session_state:
+        st.session_state[f'delete_confirmation_{key_suffix}'] = None
+    if f'changes_preview_{key_suffix}' not in st.session_state:
+        st.session_state[f'changes_preview_{key_suffix}'] = {}
+    
+    # Display mode selection
+    edit_mode = st.radio(
+        "Edit Mode",
+        ["View Only", "Bulk Edit", "Row-by-Row Edit"],
+        key=f"edit_mode_{key_suffix}"
     )
     
-    # Track changes
-    added_rows = []
-    deleted_rows = []
-    modified_rows = []
+    if edit_mode == "View Only":
+        st.dataframe(display_df, use_container_width=True)
+        return display_df, {'added': [], 'deleted': [], 'modified': []}
     
-    if not edited_df.equals(display_df):
-        # Find added rows
-        if len(edited_df) > len(display_df):
-            added_rows = edited_df.iloc[len(display_df):].index.tolist()
+    elif edit_mode == "Bulk Edit":
+        # Original bulk editing interface
+        edited_df = st.data_editor(
+            display_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key=f"bulk_editor_{key_suffix}"
+        )
         
-        # Find deleted rows
-        if len(edited_df) < len(display_df):
-            deleted_rows = list(set(display_df.index) - set(edited_df.index))
+        # Track changes
+        changes = {'added': [], 'deleted': [], 'modified': []}
         
-        # Find modified rows
-        for idx in edited_df.index:
-            if idx < len(display_df):
-                if not edited_df.loc[idx].equals(display_df.loc[idx]):
-                    modified_rows.append(idx)
+        if not edited_df.equals(display_df):
+            if len(edited_df) > len(display_df):
+                changes['added'] = edited_df.iloc[len(display_df):].index.tolist()
+            if len(edited_df) < len(display_df):
+                changes['deleted'] = list(set(display_df.index) - set(edited_df.index))
+            for idx in edited_df.index:
+                if idx < len(display_df):
+                    if not edited_df.loc[idx].equals(display_df.loc[idx]):
+                        changes['modified'].append(idx)
+        
+        return edited_df, changes
     
-    return edited_df, {
-        'added': added_rows,
-        'deleted': deleted_rows,
-        'modified': modified_rows
-    }
+    else:  # Row-by-Row Edit
+        # Display table with action buttons
+        for idx, row in display_df.iterrows():
+            with st.expander(f"Row {idx + 1}: {row.iloc[0] if len(row) > 0 else 'Empty'}", expanded=False):
+                col1, col2, col3 = st.columns([6, 1, 1])
+                
+                with col1:
+                    # Display row data
+                    row_df = pd.DataFrame([row]).T
+                    row_df.columns = ['Value']
+                    st.dataframe(row_df, use_container_width=True)
+                
+                with col2:
+                    if st.button("Edit", key=f"edit_{idx}_{key_suffix}"):
+                        st.session_state[f'editing_row_{key_suffix}'] = idx
+                
+                with col3:
+                    if st.button("Delete", key=f"delete_{idx}_{key_suffix}"):
+                        st.session_state[f'delete_confirmation_{key_suffix}'] = idx
+        
+        # Handle row editing
+        if st.session_state[f'editing_row_{key_suffix}'] is not None:
+            edit_idx = st.session_state[f'editing_row_{key_suffix}']
+            st.subheader(f"Editing Row {edit_idx + 1}")
+            
+            with st.form(f"edit_form_{edit_idx}_{key_suffix}"):
+                edited_values = {}
+                for col in display_df.columns:
+                    current_value = display_df.loc[edit_idx, col]
+                    edited_values[col] = st.text_input(
+                        f"{col}",
+                        value=str(current_value),
+                        key=f"edit_field_{col}_{edit_idx}_{key_suffix}"
+                    )
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.form_submit_button("Save Changes"):
+                        # Update the dataframe
+                        for col, value in edited_values.items():
+                            display_df.loc[edit_idx, col] = value
+                        st.session_state[f'editing_row_{key_suffix}'] = None
+                        st.success("Row updated successfully!")
+                        st.rerun()
+                
+                with col2:
+                    if st.form_submit_button("Cancel"):
+                        st.session_state[f'editing_row_{key_suffix}'] = None
+                        st.rerun()
+        
+        # Handle delete confirmation
+        if st.session_state[f'delete_confirmation_{key_suffix}'] is not None:
+            delete_idx = st.session_state[f'delete_confirmation_{key_suffix}']
+            st.warning(f"⚠️ Confirm deletion of Row {delete_idx + 1}")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Confirm Delete", type="primary", key=f"confirm_delete_{delete_idx}_{key_suffix}"):
+                    display_df = display_df.drop(delete_idx).reset_index(drop=True)
+                    st.session_state[f'delete_confirmation_{key_suffix}'] = None
+                    st.success("Row deleted successfully!")
+                    st.rerun()
+            
+            with col2:
+                if st.button("Cancel Delete", key=f"cancel_delete_{delete_idx}_{key_suffix}"):
+                    st.session_state[f'delete_confirmation_{key_suffix}'] = None
+                    st.rerun()
+        
+        # Add new row functionality
+        if st.button("Add New Row", key=f"add_row_{key_suffix}"):
+            new_row = pd.Series([''] * len(display_df.columns), index=display_df.columns)
+            display_df = pd.concat([display_df, new_row.to_frame().T], ignore_index=True)
+            st.rerun()
+        
+        return display_df, {'added': [], 'deleted': [], 'modified': []}
+
+def display_editable_table(gdf):
+    """Backward compatibility wrapper"""
+    return display_enhanced_editable_table(gdf, "default")
 
 def apply_edits_to_layer(feature_layer, original_gdf, edited_df, changes):
     """Apply edits to the feature layer"""
@@ -442,9 +659,18 @@ def create_new_layer():
                 with st.spinner("Loading shapefile data..."):
                     gdf = load_shapefile_data(uploaded_file)
                     if gdf is not None:
+                        # Validate coordinate system
+                        gdf, crs_valid = validate_coordinate_system(gdf)
+                        
                         st.session_state.shapefile_data = gdf
                         st.session_state.show_editor = True
                         st.success(f"Loaded {len(gdf)} features with {len(gdf.columns)} attributes")
+                        
+                        # Display CRS info
+                        if gdf.crs:
+                            st.info(f"Coordinate System: {gdf.crs}")
+                        else:
+                            st.warning("No coordinate system detected")
     
     # Data editing section
     if st.session_state.show_editor and st.session_state.shapefile_data is not None:
@@ -765,6 +991,113 @@ def edit_layer_data():
                     st.session_state.current_layer_data = None
                     st.rerun()
 
+def user_settings():
+    """User settings and preferences management"""
+    st.header("⚙️ Settings")
+    
+    # Load current settings
+    load_user_settings()
+    
+    st.subheader("General Preferences")
+    
+    with st.form("settings_form"):
+        # Default sharing level
+        default_sharing = st.selectbox(
+            "Default Sharing Level",
+            options=["Private", "Organization", "Public"],
+            index=["Private", "Organization", "Public"].index(
+                st.session_state.user_settings.get('default_sharing_level', 'Private')
+            ),
+            help="Default sharing level for new layers"
+        )
+        
+        # IRTH integration settings
+        st.subheader("IRTH Integration")
+        irth_id = st.text_input(
+            "IRTH ID/Tag",
+            value=st.session_state.user_settings.get('irth_id', ''),
+            help="Optional IRTH identifier for layer tracking"
+        )
+        
+        # Performance settings
+        st.subheader("Performance Settings")
+        batch_size = st.number_input(
+            "Batch Size for Large Operations",
+            min_value=100,
+            max_value=10000,
+            value=st.session_state.user_settings.get('batch_size', 1000),
+            step=100,
+            help="Number of features processed in each batch"
+        )
+        
+        # Coordinate system settings
+        auto_reproject = st.checkbox(
+            "Auto-reproject coordinate systems",
+            value=st.session_state.user_settings.get('auto_reproject', True),
+            help="Automatically offer reprojection for mismatched coordinate systems"
+        )
+        
+        # Save settings button
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.form_submit_button("Save Settings", type="primary"):
+                st.session_state.user_settings.update({
+                    'default_sharing_level': default_sharing,
+                    'irth_id': irth_id,
+                    'batch_size': batch_size,
+                    'auto_reproject': auto_reproject
+                })
+                
+                if save_user_settings():
+                    st.success("Settings saved successfully!")
+                else:
+                    st.error("Failed to save settings")
+        
+        with col2:
+            if st.form_submit_button("Reset to Defaults"):
+                st.session_state.user_settings = {
+                    'default_sharing_level': 'Private',
+                    'irth_id': '',
+                    'batch_size': 1000,
+                    'auto_reproject': True
+                }
+                save_user_settings()
+                st.success("Settings reset to defaults!")
+                st.rerun()
+        
+        with col3:
+            if st.form_submit_button("Export Settings"):
+                settings_json = json.dumps(st.session_state.user_settings, indent=2)
+                st.download_button(
+                    label="Download Settings",
+                    data=settings_json,
+                    file_name="arcgis_layer_updater_settings.json",
+                    mime="application/json"
+                )
+    
+    # Import settings
+    st.subheader("Import Settings")
+    uploaded_settings = st.file_uploader(
+        "Upload Settings File",
+        type=['json'],
+        help="Upload a previously exported settings file"
+    )
+    
+    if uploaded_settings:
+        try:
+            settings_data = json.load(uploaded_settings)
+            st.session_state.user_settings.update(settings_data)
+            save_user_settings()
+            st.success("Settings imported successfully!")
+            st.rerun()
+        except Exception as e:
+            st.error(f"Error importing settings: {str(e)}")
+    
+    # Display current settings
+    st.subheader("Current Settings")
+    st.json(st.session_state.user_settings)
+
 def view_content():
     """Display user's existing content"""
     st.header("📋 Your ArcGIS Online Content")
@@ -828,7 +1161,7 @@ def main():
     st.sidebar.header("Navigation")
     page = st.sidebar.selectbox(
         "Select Action",
-        ["View Content", "Update Existing Layer", "Create New Layer", "Edit Layer Data"]
+        ["View Content", "Update Existing Layer", "Create New Layer", "Edit Layer Data", "Settings"]
     )
     
     # Display selected page
@@ -840,6 +1173,8 @@ def main():
         create_new_layer()
     elif page == "Edit Layer Data":
         edit_layer_data()
+    elif page == "Settings":
+        user_settings()
 
 if __name__ == "__main__":
     main()
