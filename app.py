@@ -285,13 +285,13 @@ def load_shapefile_data(zip_file):
         st.error(f"Error loading shapefile: {str(e)}")
         return None
 
-def display_enhanced_editable_table(gdf, key_suffix=""):
-    """Display enhanced table with row-by-row editing and confirmation dialogs"""
+def display_enhanced_editable_table(gdf, target_layer=None, key_suffix=""):
+    """Display form-based table editing interface with ArcGIS API integration"""
     if gdf is None or gdf.empty:
         st.warning("No data to display")
         return None, None
     
-    st.subheader("Feature Data")
+    st.subheader("Feature Data Editor")
     
     # Convert geometry to string for display
     display_df = gdf.copy()
@@ -303,119 +303,222 @@ def display_enhanced_editable_table(gdf, key_suffix=""):
         st.session_state[f'editing_row_{key_suffix}'] = None
     if f'delete_confirmation_{key_suffix}' not in st.session_state:
         st.session_state[f'delete_confirmation_{key_suffix}'] = None
-    if f'changes_preview_{key_suffix}' not in st.session_state:
-        st.session_state[f'changes_preview_{key_suffix}'] = {}
+    if f'changes_applied_{key_suffix}' not in st.session_state:
+        st.session_state[f'changes_applied_{key_suffix}'] = []
     
-    # Display mode selection
-    edit_mode = st.radio(
-        "Edit Mode",
-        ["View Only", "Bulk Edit", "Row-by-Row Edit"],
-        key=f"edit_mode_{key_suffix}"
-    )
+    # Display summary info
+    st.info(f"Total Features: {len(display_df)} | Columns: {len(display_df.columns)}")
     
-    if edit_mode == "View Only":
-        st.dataframe(display_df, use_container_width=True)
-        return display_df, {'added': [], 'deleted': [], 'modified': []}
+    # Progress tracking for applied changes
+    if st.session_state[f'changes_applied_{key_suffix}']:
+        st.success(f"Changes applied: {len(st.session_state[f'changes_applied_{key_suffix}'])}")
     
-    elif edit_mode == "Bulk Edit":
-        # Original bulk editing interface
-        edited_df = st.data_editor(
-            display_df,
-            num_rows="dynamic",
-            use_container_width=True,
-            key=f"bulk_editor_{key_suffix}"
-        )
-        
-        # Track changes
-        changes = {'added': [], 'deleted': [], 'modified': []}
-        
-        if not edited_df.equals(display_df):
-            if len(edited_df) > len(display_df):
-                changes['added'] = edited_df.iloc[len(display_df):].index.tolist()
-            if len(edited_df) < len(display_df):
-                changes['deleted'] = list(set(display_df.index) - set(edited_df.index))
-            for idx in edited_df.index:
-                if idx < len(display_df):
-                    if not edited_df.loc[idx].equals(display_df.loc[idx]):
-                        changes['modified'].append(idx)
-        
-        return edited_df, changes
-    
-    else:  # Row-by-Row Edit
-        # Display table with action buttons
-        for idx, row in display_df.iterrows():
-            with st.expander(f"Row {idx + 1}: {row.iloc[0] if len(row) > 0 else 'Empty'}", expanded=False):
-                col1, col2, col3 = st.columns([6, 1, 1])
+    # Form-based row display and editing
+    for idx, row in display_df.iterrows():
+        # Create unique container for each row
+        with st.container():
+            st.markdown(f"### Row {idx + 1}")
+            
+            # Create form for each row
+            with st.form(f"row_form_{idx}_{key_suffix}"):
+                # Display fields in a grid layout
+                cols = st.columns(min(3, len(display_df.columns)))
+                edited_values = {}
+                
+                for col_idx, column in enumerate(display_df.columns):
+                    with cols[col_idx % 3]:
+                        current_value = row[column]
+                        # Handle different data types appropriately
+                        if pd.isna(current_value):
+                            current_value = ""
+                        
+                        edited_values[column] = st.text_input(
+                            label=f"{column}",
+                            value=str(current_value),
+                            key=f"field_{column}_{idx}_{key_suffix}",
+                            help=f"Edit {column} for row {idx + 1}"
+                        )
+                
+                # Action buttons for each row
+                col1, col2, col3 = st.columns([1, 1, 2])
                 
                 with col1:
-                    # Display row data
-                    row_df = pd.DataFrame([row]).T
-                    row_df.columns = ['Value']
-                    st.dataframe(row_df, use_container_width=True)
+                    save_edit = st.form_submit_button(
+                        "Save Edit",
+                        type="primary",
+                        help="Save changes to this row"
+                    )
                 
                 with col2:
-                    if st.button("Edit", key=f"edit_{idx}_{key_suffix}"):
-                        st.session_state[f'editing_row_{key_suffix}'] = idx
-                
-                with col3:
-                    if st.button("Delete", key=f"delete_{idx}_{key_suffix}"):
-                        st.session_state[f'delete_confirmation_{key_suffix}'] = idx
-        
-        # Handle row editing
-        if st.session_state[f'editing_row_{key_suffix}'] is not None:
-            edit_idx = st.session_state[f'editing_row_{key_suffix}']
-            st.subheader(f"Editing Row {edit_idx + 1}")
-            
-            with st.form(f"edit_form_{edit_idx}_{key_suffix}"):
-                edited_values = {}
-                for col in display_df.columns:
-                    current_value = display_df.loc[edit_idx, col]
-                    edited_values[col] = st.text_input(
-                        f"{col}",
-                        value=str(current_value),
-                        key=f"edit_field_{col}_{edit_idx}_{key_suffix}"
+                    delete_row = st.form_submit_button(
+                        "Delete",
+                        help="Delete this row"
                     )
+                
+                # Handle Save Edit action
+                if save_edit:
+                    try:
+                        with st.spinner(f"Saving changes to row {idx + 1}..."):
+                            if target_layer:
+                                # Apply changes to ArcGIS layer
+                                feature_attributes = {k: v for k, v in edited_values.items() if k != 'geometry'}
+                                
+                                # Get OBJECTID for update (assuming it exists)
+                                if 'OBJECTID' in row:
+                                    feature_attributes['OBJECTID'] = row['OBJECTID']
+                                    
+                                    # Create feature for update
+                                    update_feature = {
+                                        'attributes': feature_attributes
+                                    }
+                                    
+                                    # Add geometry if present
+                                    if 'geometry' in edited_values and edited_values['geometry']:
+                                        try:
+                                            from shapely import wkt
+                                            geom = wkt.loads(edited_values['geometry'])
+                                            update_feature['geometry'] = json.loads(geom.__geo_interface__)
+                                        except:
+                                            pass
+                                    
+                                    # Apply update to ArcGIS layer
+                                    result = target_layer.edit_features(updates=[update_feature])
+                                    
+                                    if result.get('updateResults') and result['updateResults'][0].get('success'):
+                                        # Update local dataframe
+                                        for col, value in edited_values.items():
+                                            display_df.loc[idx, col] = value
+                                        
+                                        st.session_state[f'changes_applied_{key_suffix}'].append(f"Updated row {idx + 1}")
+                                        st.success(f"Row {idx + 1} updated successfully!")
+                                        st.rerun()
+                                    else:
+                                        error_msg = result.get('updateResults', [{}])[0].get('error', {}).get('description', 'Unknown error')
+                                        st.error(f"Failed to update row {idx + 1}: {error_msg}")
+                                else:
+                                    st.error("Cannot update row: OBJECTID not found")
+                            else:
+                                # Local update only (for preview mode)
+                                for col, value in edited_values.items():
+                                    display_df.loc[idx, col] = value
+                                st.success(f"Row {idx + 1} updated locally!")
+                                st.rerun()
+                                
+                    except Exception as e:
+                        st.error(f"Error updating row {idx + 1}: {str(e)}")
+                
+                # Handle Delete action with confirmation
+                if delete_row:
+                    st.session_state[f'delete_confirmation_{key_suffix}'] = idx
+                    st.rerun()
+            
+            # Display delete confirmation dialog
+            if st.session_state[f'delete_confirmation_{key_suffix}'] == idx:
+                st.warning(f"⚠️ Are you sure you want to delete Row {idx + 1}?")
+                st.write("This action cannot be undone.")
+                
+                # Show row data for confirmation
+                with st.expander("Row data to be deleted"):
+                    for col, val in row.items():
+                        st.write(f"**{col}:** {val}")
                 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.form_submit_button("Save Changes"):
-                        # Update the dataframe
-                        for col, value in edited_values.items():
-                            display_df.loc[edit_idx, col] = value
-                        st.session_state[f'editing_row_{key_suffix}'] = None
-                        st.success("Row updated successfully!")
-                        st.rerun()
+                    if st.button(f"Confirm Delete Row {idx + 1}", type="primary", key=f"confirm_del_{idx}_{key_suffix}"):
+                        try:
+                            with st.spinner(f"Deleting row {idx + 1}..."):
+                                if target_layer and 'OBJECTID' in row:
+                                    # Delete from ArcGIS layer
+                                    where_clause = f"OBJECTID = {row['OBJECTID']}"
+                                    result = target_layer.delete_features(where=where_clause)
+                                    
+                                    if result.get('deleteResults') and result['deleteResults'][0].get('success'):
+                                        # Remove from local dataframe
+                                        display_df = display_df.drop(idx).reset_index(drop=True)
+                                        st.session_state[f'changes_applied_{key_suffix}'].append(f"Deleted row {idx + 1}")
+                                        st.session_state[f'delete_confirmation_{key_suffix}'] = None
+                                        st.success(f"Row {idx + 1} deleted successfully!")
+                                        st.rerun()
+                                    else:
+                                        error_msg = result.get('deleteResults', [{}])[0].get('error', {}).get('description', 'Unknown error')
+                                        st.error(f"Failed to delete row {idx + 1}: {error_msg}")
+                                else:
+                                    # Local delete only
+                                    display_df = display_df.drop(idx).reset_index(drop=True)
+                                    st.session_state[f'delete_confirmation_{key_suffix}'] = None
+                                    st.success(f"Row {idx + 1} deleted locally!")
+                                    st.rerun()
+                                    
+                        except Exception as e:
+                            st.error(f"Error deleting row {idx + 1}: {str(e)}")
                 
                 with col2:
-                    if st.form_submit_button("Cancel"):
-                        st.session_state[f'editing_row_{key_suffix}'] = None
+                    if st.button(f"Cancel Delete", key=f"cancel_del_{idx}_{key_suffix}"):
+                        st.session_state[f'delete_confirmation_{key_suffix}'] = None
                         st.rerun()
-        
-        # Handle delete confirmation
-        if st.session_state[f'delete_confirmation_{key_suffix}'] is not None:
-            delete_idx = st.session_state[f'delete_confirmation_{key_suffix}']
-            st.warning(f"⚠️ Confirm deletion of Row {delete_idx + 1}")
             
-            col1, col2 = st.columns(2)
-            with col1:
-                if st.button("Confirm Delete", type="primary", key=f"confirm_delete_{delete_idx}_{key_suffix}"):
-                    display_df = display_df.drop(delete_idx).reset_index(drop=True)
-                    st.session_state[f'delete_confirmation_{key_suffix}'] = None
-                    st.success("Row deleted successfully!")
-                    st.rerun()
-            
-            with col2:
-                if st.button("Cancel Delete", key=f"cancel_delete_{delete_idx}_{key_suffix}"):
-                    st.session_state[f'delete_confirmation_{key_suffix}'] = None
-                    st.rerun()
+            st.divider()  # Visual separator between rows
+    
+    # Add new row functionality
+    st.subheader("Add New Row")
+    with st.form(f"add_new_row_{key_suffix}"):
+        st.write("Enter values for new feature:")
+        new_values = {}
         
-        # Add new row functionality
-        if st.button("Add New Row", key=f"add_row_{key_suffix}"):
-            new_row = pd.Series([''] * len(display_df.columns), index=display_df.columns)
-            display_df = pd.concat([display_df, new_row.to_frame().T], ignore_index=True)
-            st.rerun()
+        cols = st.columns(min(3, len(display_df.columns)))
+        for col_idx, column in enumerate(display_df.columns):
+            if column != 'OBJECTID':  # Don't allow editing OBJECTID for new rows
+                with cols[col_idx % 3]:
+                    new_values[column] = st.text_input(
+                        f"{column}",
+                        key=f"new_{column}_{key_suffix}",
+                        help=f"Enter value for {column}"
+                    )
         
-        return display_df, {'added': [], 'deleted': [], 'modified': []}
+        if st.form_submit_button("Add New Row", type="primary"):
+            try:
+                with st.spinner("Adding new row..."):
+                    if target_layer:
+                        # Add to ArcGIS layer
+                        feature_attributes = {k: v for k, v in new_values.items() if k != 'geometry' and v}
+                        
+                        new_feature = {
+                            'attributes': feature_attributes
+                        }
+                        
+                        # Add geometry if present
+                        if 'geometry' in new_values and new_values['geometry']:
+                            try:
+                                from shapely import wkt
+                                geom = wkt.loads(new_values['geometry'])
+                                new_feature['geometry'] = json.loads(geom.__geo_interface__)
+                            except:
+                                pass
+                        
+                        # Apply addition to ArcGIS layer
+                        result = target_layer.edit_features(adds=[new_feature])
+                        
+                        if result.get('addResults') and result['addResults'][0].get('success'):
+                            # Add to local dataframe
+                            new_row = pd.Series(new_values, name=len(display_df))
+                            display_df = pd.concat([display_df, new_row.to_frame().T], ignore_index=True)
+                            st.session_state[f'changes_applied_{key_suffix}'].append("Added new row")
+                            st.success("New row added successfully!")
+                            st.rerun()
+                        else:
+                            error_msg = result.get('addResults', [{}])[0].get('error', {}).get('description', 'Unknown error')
+                            st.error(f"Failed to add new row: {error_msg}")
+                    else:
+                        # Local add only
+                        new_row = pd.Series(new_values, name=len(display_df))
+                        display_df = pd.concat([display_df, new_row.to_frame().T], ignore_index=True)
+                        st.success("New row added locally!")
+                        st.rerun()
+                        
+            except Exception as e:
+                st.error(f"Error adding new row: {str(e)}")
+    
+    return display_df, {'added': [], 'deleted': [], 'modified': []}
 
 def display_editable_table(gdf):
     """Backward compatibility wrapper"""
@@ -906,114 +1009,32 @@ def edit_layer_data():
         # Display editable data if loaded
         if 'current_layer_data' in st.session_state and st.session_state.current_layer_data is not None:
             st.subheader("Edit Layer Features")
-            st.info("Edit the data below. Changes will be applied directly to the ArcGIS Online layer.")
+            st.info("Use the form-based editor below. Changes are applied immediately to ArcGIS Online.")
             
-            # Display editable table
-            edited_df = st.data_editor(
+            # Use the enhanced form-based editing interface
+            edited_df, changes = display_enhanced_editable_table(
                 st.session_state.current_layer_data,
-                num_rows="dynamic",
-                use_container_width=True,
-                key="layer_data_editor"
+                target_layer=target_layer,
+                key_suffix="edit_layer"
             )
             
-            # Apply changes button
+            # Update session state with any changes
+            if edited_df is not None:
+                st.session_state.current_layer_data = edited_df
+            
+            # Additional controls
             col1, col2 = st.columns(2)
             with col1:
-                if st.button("Apply Changes to Layer", type="primary", key="apply_changes"):
-                    try:
-                        with st.spinner("Applying changes to layer..."):
-                            # Detect changes
-                            original_df = st.session_state.current_layer_data
-                            
-                            # Find added rows
-                            added_rows = []
-                            if len(edited_df) > len(original_df):
-                                added_rows = edited_df.iloc[len(original_df):].to_dict('records')
-                            
-                            # Find deleted rows
-                            deleted_rows = []
-                            if len(edited_df) < len(original_df):
-                                deleted_indices = set(original_df.index) - set(edited_df.index)
-                                deleted_rows = [original_df.loc[idx] for idx in deleted_indices]
-                            
-                            # Find modified rows
-                            modified_rows = []
-                            for idx in edited_df.index:
-                                if idx < len(original_df):
-                                    if not edited_df.loc[idx].equals(original_df.loc[idx]):
-                                        modified_rows.append(edited_df.loc[idx].to_dict())
-                            
-                            # Apply changes using ArcGIS API
-                            success_count = 0
-                            total_operations = len(added_rows) + len(deleted_rows) + len(modified_rows)
-                            
-                            if added_rows:
-                                # Add new features
-                                new_features = []
-                                for row in added_rows:
-                                    feature_dict = {
-                                        'attributes': {k: v for k, v in row.items() if k != 'geometry'}
-                                    }
-                                    if 'geometry' in row and row['geometry']:
-                                        try:
-                                            # Parse geometry if it's a string
-                                            from shapely import wkt
-                                            geom = wkt.loads(row['geometry'])
-                                            feature_dict['geometry'] = json.loads(geom.__geo_interface__)
-                                        except:
-                                            pass
-                                    new_features.append(feature_dict)
-                                
-                                if new_features:
-                                    result = target_layer.edit_features(adds=new_features)
-                                    success_count += sum(1 for r in result.get('addResults', []) if r.get('success', False))
-                            
-                            if modified_rows:
-                                # Update existing features
-                                update_features = []
-                                for row in modified_rows:
-                                    feature_dict = {
-                                        'attributes': {k: v for k, v in row.items() if k != 'geometry'}
-                                    }
-                                    if 'geometry' in row and row['geometry']:
-                                        try:
-                                            from shapely import wkt
-                                            geom = wkt.loads(row['geometry'])
-                                            feature_dict['geometry'] = json.loads(geom.__geo_interface__)
-                                        except:
-                                            pass
-                                    update_features.append(feature_dict)
-                                
-                                if update_features:
-                                    result = target_layer.edit_features(updates=update_features)
-                                    success_count += sum(1 for r in result.get('updateResults', []) if r.get('success', False))
-                            
-                            if deleted_rows:
-                                # Delete features by OBJECTID
-                                delete_oids = []
-                                for row in deleted_rows:
-                                    if 'OBJECTID' in row:
-                                        delete_oids.append(row['OBJECTID'])
-                                
-                                if delete_oids:
-                                    where_clause = f"OBJECTID IN ({','.join(map(str, delete_oids))})"
-                                    result = target_layer.delete_features(where=where_clause)
-                                    success_count += sum(1 for r in result.get('deleteResults', []) if r.get('success', False))
-                            
-                            if total_operations > 0:
-                                st.success(f"Successfully applied {success_count}/{total_operations} changes to the layer!")
-                                # Refresh the data
-                                st.session_state.current_layer_data = None
-                                st.rerun()
-                            else:
-                                st.info("No changes detected")
-                                
-                    except Exception as e:
-                        st.error(f"Error applying changes: {str(e)}")
+                if st.button("Refresh Layer Data", key="refresh_data", type="secondary"):
+                    st.session_state.current_layer_data = None
+                    st.success("Data refreshed! Click 'Load Current Layer Data' to reload.")
+                    st.rerun()
             
             with col2:
-                if st.button("Refresh Data", key="refresh_data"):
-                    st.session_state.current_layer_data = None
+                if st.button("Reset Changes Tracker", key="reset_tracker"):
+                    if f'changes_applied_edit_layer' in st.session_state:
+                        st.session_state[f'changes_applied_edit_layer'] = []
+                    st.success("Changes tracker reset!")
                     st.rerun()
 
 def user_settings():
