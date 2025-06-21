@@ -38,13 +38,22 @@ class NotificationManager:
             
             # Also check environment variables and secrets as fallback
             if not self.email_password:
-                self.email_password = os.getenv('EMAIL_PASSWORD') or st.secrets.get('EMAIL_PASSWORD', '')
+                try:
+                    self.email_password = os.getenv('EMAIL_PASSWORD') or st.secrets.get('EMAIL_PASSWORD', '')
+                except:
+                    self.email_password = os.getenv('EMAIL_PASSWORD', '')
             
             if not self.email_from:
-                self.email_from = os.getenv('EMAIL_FROM') or st.secrets.get('EMAIL_FROM', '')
+                try:
+                    self.email_from = os.getenv('EMAIL_FROM') or st.secrets.get('EMAIL_FROM', '')
+                except:
+                    self.email_from = os.getenv('EMAIL_FROM', '')
             
             if not self.email_to:
-                self.email_to = os.getenv('EMAIL_TO') or st.secrets.get('EMAIL_TO', '')
+                try:
+                    self.email_to = os.getenv('EMAIL_TO') or st.secrets.get('EMAIL_TO', '')
+                except:
+                    self.email_to = os.getenv('EMAIL_TO', '')
                 
         except Exception as e:
             st.error(f"Error configuring notifications: {str(e)}")

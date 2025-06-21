@@ -17,7 +17,10 @@ class SettingsManager:
         """Get or generate encryption key"""
         if self._encryption_key is None:
             # Try to get key from environment or secrets
-            key_string = os.getenv('ENCRYPTION_KEY') or st.secrets.get('ENCRYPTION_KEY', '')
+            try:
+                key_string = os.getenv('ENCRYPTION_KEY') or st.secrets.get('ENCRYPTION_KEY', '')
+            except:
+                key_string = os.getenv('ENCRYPTION_KEY', '')
             
             if key_string:
                 self._encryption_key = key_string.encode()
@@ -78,8 +81,9 @@ class SettingsManager:
                     settings_to_save[field] = self._encrypt_value(settings_to_save[field])
             
             # Add metadata
+            from datetime import datetime
             settings_to_save['_metadata'] = {
-                'saved_at': str(pd.Timestamp.now()),
+                'saved_at': datetime.now().isoformat(),
                 'version': '1.0',
                 'encrypted_fields': self.encrypted_fields
             }

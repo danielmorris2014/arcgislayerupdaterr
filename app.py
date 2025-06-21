@@ -108,7 +108,10 @@ def authentication_section():
         
         # Check for API key in secrets if not provided
         if not api_key:
-            api_key = st.secrets.get("ARCGIS_API_KEY", "")
+            try:
+                api_key = st.secrets.get("ARCGIS_API_KEY", "")
+            except:
+                api_key = ""
         
         username = st.text_input(
             "Username",
@@ -123,7 +126,7 @@ def authentication_section():
         )
         
         if st.button("Authenticate", type="primary"):
-            if api_key and username:
+            if api_key and username and portal_url:
                 try:
                     with st.spinner("Authenticating..."):
                         arcgis_manager = ArcGISManager(api_key, username, portal_url)
@@ -567,29 +570,36 @@ def settings_section():
             value=current_settings.get('email_enabled', False)
         )
         
+        # Initialize email variables
+        smtp_server = current_settings.get('smtp_server', 'smtp.gmail.com')
+        smtp_port = current_settings.get('smtp_port', 587)
+        email_from = current_settings.get('email_from', '')
+        email_password = current_settings.get('email_password', '')
+        email_to = current_settings.get('email_to', '')
+        
         if email_enabled:
             smtp_server = st.text_input(
                 "SMTP Server",
-                value=current_settings.get('smtp_server', 'smtp.gmail.com')
+                value=smtp_server
             )
             smtp_port = st.number_input(
                 "SMTP Port",
-                value=current_settings.get('smtp_port', 587),
+                value=smtp_port,
                 min_value=1,
                 max_value=65535
             )
             email_from = st.text_input(
                 "From Email",
-                value=current_settings.get('email_from', '')
+                value=email_from
             )
             email_password = st.text_input(
                 "Email Password",
-                value=current_settings.get('email_password', ''),
+                value=email_password,
                 type="password"
             )
             email_to = st.text_input(
                 "To Email",
-                value=current_settings.get('email_to', '')
+                value=email_to
             )
         
         # Directory monitoring
@@ -599,10 +609,13 @@ def settings_section():
             value=current_settings.get('monitor_enabled', False)
         )
         
+        # Initialize monitor_path
+        monitor_path = current_settings.get('monitor_path', '')
+        
         if monitor_enabled:
             monitor_path = st.text_input(
                 "Directory to Monitor",
-                value=current_settings.get('monitor_path', '')
+                value=monitor_path
             )
         
         if st.button("💾 Save Settings"):
