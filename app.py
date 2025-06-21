@@ -427,7 +427,28 @@ def authenticate_irth(username, password, debug_mode=False):
             login_data[username_field] = username
         if password_field:
             login_data[password_field] = password
-        if submit_field:
+        
+        # Add required screen dimensions and timezone for irth forms
+        for inp in form_inputs:
+            name = inp.get('name', '')
+            if 'ScreenWidth' in name:
+                login_data[name] = '1920'
+            elif 'ScreenHeight' in name:
+                login_data[name] = '1080'
+            elif 'TimeZoneOffset' in name:
+                login_data[name] = '300'  # UTC-5 offset in minutes
+        
+        # For irth specifically, we need to use the correct submit button
+        # Based on the debug output, we should use the main login button, not the hidden challenge button
+        if 'ButtonLogon' in str(login_form):
+            # Find the main login button
+            for inp in form_inputs:
+                if inp.get('type') == 'submit' and 'ButtonLogon' in inp.get('name', ''):
+                    login_data[inp.get('name')] = inp.get('value', 'Log On')
+                    if debug_mode:
+                        st.write(f"🔍 Using main login button: {inp.get('name')}")
+                    break
+        elif submit_field:
             login_data[submit_field] = 'Login'
         
         if debug_mode:

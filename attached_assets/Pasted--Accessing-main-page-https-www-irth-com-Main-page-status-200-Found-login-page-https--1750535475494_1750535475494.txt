@@ -1,0 +1,339 @@
+🔍 Accessing main page: https://www.irth.com
+
+Main page status: 200
+
+🔍 Found login page: https://www.irth.com/Utilisphere/login
+
+🔍 Accessing login page: https://www.irth.com/Utilisphere/login
+
+Login page title: UtiliSphere
+
+Login page size: 24765 bytes
+
+🔍 Form action URL: https://www.irth.com/Utilisphere/./Logon.aspx?ReturnUrl=%2fUtilisphere%2flogin
+
+🔍 Form has 16 input fields:
+
+Field 1: name='__EVENTTARGET', type='hidden', id='__EVENTTARGET'
+
+Field 2: name='__EVENTARGUMENT', type='hidden', id='__EVENTARGUMENT'
+
+Field 3: name='__VIEWSTATE', type='hidden', id='__VIEWSTATE'
+
+Field 4: name='__VIEWSTATEGENERATOR', type='hidden', id='__VIEWSTATEGENERATOR'
+
+Field 5: name='__EVENTVALIDATION', type='hidden', id='__EVENTVALIDATION'
+
+Field 6: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginTimeZoneOffset', type='hidden', id='ctl00_cphLogin_TimeZoneOffset'
+
+Field 7: name='', type='hidden', id='hdBaseDir'
+
+Field 8: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLogin_ScreenWidth', type='hidden', id='ctl00_cphLogin__ScreenWidth'
+
+Field 9: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLogin_ScreenHeight', type='hidden', id='ctl00_cphLogin__ScreenHeight'
+
+Field 10: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLogin_IDPInitSAML', type='hidden', id='ctl00_cphLogin__IDPInitSAML'
+
+Field 11: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginhdnOIDToken', type='hidden', id='ctl00_cphLogin_hdnOIDToken'
+
+Field 12: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginUserIDTextBox', type='text', id='ctl00_cphLogin_UserIDTextBox'
+
+Field 13: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginPasswordTextBox', type='password', id='ctl00_cphLogin_PasswordTextBox'
+
+Field 14: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginchxRememberMe', type='checkbox', id='ctl00_cphLogin_chxRememberMe'
+
+Field 15: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginButtonLogon', type='submit', id='ctl00_cphLogin_ButtonLogon'
+
+Field 16: name='ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginbtnHdnChallenge', type='submit', id='ctl00_cphLogin_btnHdnChallenge'
+
+🔍 Found username field: ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginUserIDTextBox
+
+🔍 Found password field: ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginPasswordTextBox
+
+🔍 Final username field: ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginUserIDTextBox
+
+🔍 Final password field: ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginPasswordTextBox
+
+🔍 Submit field: ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginbtnHdnChallenge
+
+🔍 Complete form data: {'__EVENTTARGET': '', '__EVENTARGUMENT': '', '__VIEWSTATE': 'hAfKLpYA++89mpDfEOHx0OXc/Hm1H/tYjjwpq3Tz3QJHnRSw9q87HvBiTGCesTvXgMKR1y1baVg/3dDaaPBOlBMzWfTKP/vMYvdx6wQJeCIuipgv9Ky2E5Pm/48FcghUNRjviDHIQUoBh7w1+KNF03v9qnhcOT56KcTIDnrPT32ywz1rVV5LAJPrHT4FGmwkJMNDc06c5wogHnOBYZXQWmq+U4pdZP1vWzDKyHdquUAQBrDlRCn3BH1hIWMRYUPLjYFJbrY2zS0el/1I8phpSNSQ6LsrM5UU69ej28b8IYIhpWOS1jOn8ugqP+KA6/zHYRtQKxx3e2CTqc5cntMdXYujfbJn2Xo3Oarg3VcHUCoPoSJ3oUY6FqQQt6nu02Fw6F2gWkjK8mqkjo+dCcmSsDmrnsmtcibcwkk+cgaDGG/cK/eU/D12bq44kMZRjwWDMSdtvw==', '__VIEWSTATEGENERATOR': '03718E7E', '__EVENTVALIDATION': '60z0CrLAdh1Av9OJ3gMVdXbK6dP+gyn0vcZeURqqTTLqJ49jiVqUnNrcjstRP786yzmqjxnWv0UJo/cmHA1FNjiiIOpyLqnfG6cr4HS0bY35qgnnxA0G7ytvAXs84T6abQQ5XCgZPJfFhKQnJB7dFZpRzKzUqYFk7yuxBNZ2Sye/trZjYRvOgOobc44EroGd8U+s9HwQbhyd0qBoNAKCvus5tZK/Q8EXu/hMSW3TrEiiwz6T/VGlE7cBpk/eh/69asOtB06fMeiDp+Y6PDSL07bNsSYYo5fe7gqub4uV9P36h1bB5yYR6iiMCF3NgqbEPzAPJw==', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginTimeZoneOffset': '', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLogin_ScreenWidth': '', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLogin_ScreenHeight': '', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLogin_IDPInitSAML': '', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginhdnOIDToken': '', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginUserIDTextBox': 'morris1', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginPasswordTextBox': 'ITSDWM88KBbmx!', 'ctl00
+c
+p
+h
+L
+o
+g
+i
+n
+cphLoginbtnHdnChallenge': 'Login'}
+
+Form HTML:
+
+<form action="./Logon.aspx?ReturnUrl=%2fUtilisphere%2flogin" id="aspnetForm" method="post" onsubmit="javascript:return WebForm_OnSubmit();">
+<div class="aspNetHidden">
+<input id="__EVENTTARGET" name="__EVENTTARGET" type="hidden" value=""/>
+<input id="__EVENTARGUMENT" name="__EVENTARGUMENT" type="hidden" value=""/>
+<input id="__VIEWSTATE" name="__VIEWSTATE" type="hidden" value="hAfKLpYA++89mpDfEOHx0OXc/Hm1H/tYjjwpq3Tz3QJHnRSw9q87HvBiTGCesTvXgMKR1y1baVg/3dDaaPBOlBMzWfTKP/vMYvdx6wQJeCIuipgv9Ky2E5Pm/48FcghUNRjviDHIQUoBh7w1+KNF03v9qnhcOT56KcTIDnrPT32ywz1rVV5LAJPrHT4FGmwkJMNDc06c5wogHnOBYZXQWmq+U4pdZP1vWzDKyHdquUAQBrDlRCn3BH1hIWMRYUPLjYFJbrY2zS0el/1I8phpSNSQ6LsrM5UU69ej28b8IYIhpWOS1jOn8ugqP+KA6/zHYRtQKxx3e2CTqc5cntMdXYujfbJn2Xo3Oarg3VcHUCoPoSJ3oUY6FqQQt6nu02Fw6F2gWkjK8mqkjo+dCcmSsDmrnsmtcibcwkk+cgaDGG/cK/eU/D12bq44kMZRjwWDMSdtvw=="/>
+</div>
+<script type="text/javascript">
+//<![CDATA[
+var theForm = document.forms['aspnetForm'];
+if (!theForm) {
+    theForm = document.aspnetForm;
+}
+functi...
+
+🔍 Login response status: 200
+
+🔍 Login response URL: https://www.irth.com/Utilisphere/Logon.aspx?ReturnUrl=%2FUtilisphere%2Flogin
+
+🔍 Response headers: {'Date': 'Sat, 21 Jun 2025 19:50:44 GMT', 'Content-Type': 'text/html; charset=utf-8', 'Content-Length': '7667', 'Connection': 'keep-alive', 'Cache-Control': 'no-cache', 'Pragma': 'no-cache', 'Content-Encoding': 'gzip', 'Expires': '-1', 'Vary': 'Accept-Encoding', 'Server': 'Microsoft-IIS/10.0', 'X-AspNet-Version': '4.0.30319', 'X-Frame-Options': 'sameorigin', 'X-Content-Type-Options': 'nosniff', 'X-XSS-Protection': '1; mode=block', 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload'}
+
+🔍 Response size: 24781 characters
+
+Response content sample:
+
+
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head id="ctl00_HeadSection"><title>
+	UtiliSphere
+</title><meta charset="utf-8" /><meta http-equiv="X-UA-Compatible" content="IE=edge" /><meta name="viewport" content="width=device-width, initial-scale=1, minimal-ui" /><link href="Css/Mobile/login.css" rel="stylesheet" /><link href="Css/lib/bootstrap/bootstrap.min.css" rel="stylesheet" />
+
+    <script type="text/javascript">
+        (function (i, s, o, g, r, a, m) {
+            i['GoogleAnalyticsObject'] = r; i[r] = i[r] || function () {
+                (i[r].q = i[r].q || []).push(arguments)
+            }, i[r].l = 1 * new Date(); a = s.createElement(o),
+            m = s.getElementsByTagName(o)[0]; a.async = 1; a.src = g; m.parentNode.insertBefore(a, m)
+        })(window, document, 'script', 'https://www.google-analytics.com/analytics.js', 'ga');
+
+        ga('create', 'UA-29471430-1', 'auto');
+        ga('set', 'dimension1', 'CUSTOMER');
+        ga('send', 'pageview');
+    </script>
+
+    <link rel="apple-touch-icon" sizes="57x57" href="/Utilisphere/Images/Brands/UtiliSphere/apple-icon-57x57.png" />
+<link rel="apple-touch-icon" sizes="60x60" href="/Utilisphere/Images/Brands/UtiliSphere/apple-icon-60x60.png" />
+<link rel="apple-touch-icon" sizes="72x72" href="/Utilisphere/Images/Brands/UtiliSphere/apple-icon-72x72.png" />
+<link rel="apple-touch-icon" sizes="76x76" href="/Utilisphere/Images/Brands/UtiliSphere/apple-icon-76x76.png" />
+<link rel="apple-touch-icon" sizes="114x114" href="/Utilisphere/Images/Brands/UtiliSphere/apple-icon-114x114.png" />
+<link rel="apple-touch-icon" sizes="120x120" href="/Utilisphere/Images/Brands/UtiliSphere/apple-icon-120x120.png" />
+<link rel="apple-touch-icon" sizes="144x144" href="/Utilisphere/Images/Brands/UtiliSphere/apple-icon-144x144.png" />
+<link rel="apple-touch-icon" sizes="152x152" hr...
+
+🔍 Strong success indicators: [False, False, False, False]
+
+🔍 Moderate success indicators: [False, False, False, False, False]
+
+🔍 Error indicators found: True
+
+🔍 Login page indicators: True
+
+Failed to log in to irth: Authentication failed - invalid credentials or access denied
+
+Troubleshooting Tips:
+
+Verify your username and password are correct
+Check that your account has administrative privileges
+Try accessing the irth website manually first
+The page structure may have changed - contact support if issue persists
