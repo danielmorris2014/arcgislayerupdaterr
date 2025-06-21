@@ -888,7 +888,6 @@ def irth_integration():
                         # Provide manual URL entry option
                         with st.expander("Manual Layer URL Entry"):
                             st.write("If you can access irth manually, you can enter layer URLs here:")
-                            manual_layers = []
                             
                             col1, col2 = st.columns(2)
                             with col1:
@@ -896,7 +895,8 @@ def irth_integration():
                             with col2:
                                 layer_url = st.text_input("Layer URL", key="manual_url")
                             
-                            if st.button("Add Manual Layer") and layer_name and layer_url:
+                            # Add button inside the expander
+                            if st.button("Add Manual Layer", key="add_manual") and layer_name and layer_url:
                                 if 'manual_irth_layers' not in st.session_state:
                                     st.session_state.manual_irth_layers = []
                                 
@@ -911,6 +911,39 @@ def irth_integration():
                                 st.success(f"Added layer: {layer_name}")
                                 st.rerun()
                         
+                        # Manual URL Text Area as Primary Fallback
+                        st.write("**Manual URL Input (Recommended)**")
+                        st.info("Log in at https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx and copy map layer URLs here.")
+                        
+                        manual_urls_text = st.text_area(
+                            "irth Map Layer URLs (one per line)", 
+                            height=100,
+                            placeholder="https://maps.example.com/arcgis/services/Water/MainNetwork/MapServer\nhttps://maps.example.com/arcgis/services/Sewer/SewerLines/MapServer",
+                            key="manual_urls_area"
+                        )
+                        
+                        if st.button("Import URLs from Text", key="import_text_urls") and manual_urls_text:
+                            lines = [line.strip() for line in manual_urls_text.split('\n') if line.strip()]
+                            imported_layers = []
+                            
+                            for i, url in enumerate(lines):
+                                if url.startswith('http'):
+                                    # Extract layer name from URL
+                                    layer_name = url.split('/')[-2] if '/' in url else f"Layer_{i+1}"
+                                    imported_layers.append({
+                                        'name': layer_name,
+                                        'url': url,
+                                        'id': i + 1,
+                                        'source': 'Manual text input'
+                                    })
+                            
+                            if imported_layers:
+                                st.session_state.irth_layers = imported_layers
+                                st.success(f"Imported {len(imported_layers)} layer URLs")
+                                st.rerun()
+                            else:
+                                st.warning("No valid URLs found. URLs must start with 'http'")
+
                         # CSV Import option
                         with st.expander("Import Layer URLs from CSV"):
                             st.write("**Step 1: Download Template**")
@@ -1038,6 +1071,81 @@ def irth_integration():
             st.write("**Current irth Map Layers:**")
             df = pd.DataFrame(st.session_state.irth_layers)
             st.dataframe(df, use_container_width=True)
+            
+            # Sync with ArcGIS functionality
+            if st.session_state.get('authenticated', False):
+                st.subheader("🔄 Sync with ArcGIS Online")
+                
+                # Get user's feature layers for syncing
+                user_layers = get_feature_layers()
+                if user_layers:
+                    st.write("Create mapping between irth URLs and ArcGIS FeatureServer URLs:")
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        arcgis_options = {f"{layer.title} ({layer.id})": layer for layer in user_layers}
+                        selected_arcgis_key = st.selectbox(
+                            "ArcGIS Layer",
+                            options=list(arcgis_options.keys()),
+                            key="sync_arcgis_layer"
+                        )
+                    
+                    with col2:
+                        irth_options = {f"{layer['name']} - {layer['url'][:50]}...": layer for layer in st.session_state.irth_layers}
+                        selected_irth_key = st.selectbox(
+                            "irth Layer URL",
+                            options=list(irth_options.keys()),
+                            key="sync_irth_layer"
+                        )
+                    
+                    if st.button("Create Sync Mapping", key="create_sync"):
+                        if 'sync_mappings' not in st.session_state:
+                            st.session_state.sync_mappings = []
+                        
+                        arcgis_layer = arcgis_options[selected_arcgis_key]
+                        irth_layer = irth_options[selected_irth_key]
+                        
+                        # Create FeatureServer URL from ArcGIS layer
+                        featureserver_url = arcgis_layer.url
+                        
+                        mapping = {
+                            'arcgis_title': arcgis_layer.title,
+                            'arcgis_id': arcgis_layer.id,
+                            'arcgis_url': featureserver_url,
+                            'irth_name': irth_layer['name'],
+                            'irth_url': irth_layer['url'],
+                            'created': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        }
+                        
+                        st.session_state.sync_mappings.append(mapping)
+                        st.success(f"Created sync mapping: {arcgis_layer.title} ↔ {irth_layer['name']}")
+                        st.rerun()
+                        
+            # Display sync mappings if they exist
+            if 'sync_mappings' in st.session_state and st.session_state.sync_mappings:
+                st.subheader("📋 Current Sync Mappings")
+                sync_df = pd.DataFrame(st.session_state.sync_mappings)
+                st.dataframe(sync_df[['arcgis_title', 'irth_name', 'arcgis_url', 'irth_url', 'created']], use_container_width=True)
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    # CSV Export for sync mappings
+                    if st.button("📥 Export as CSV", key="export_sync"):
+                        csv_data = sync_df.to_csv(index=False)
+                        st.download_button(
+                            label="Download Sync Mappings CSV",
+                            data=csv_data,
+                            file_name=f"irth_arcgis_sync_mappings_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                
+                with col2:
+                    # Clear mappings
+                    if st.button("🗑️ Clear All Mappings", key="clear_mappings"):
+                        st.session_state.sync_mappings = []
+                        st.success("All sync mappings cleared")
+                        st.rerun()
         else:
             st.info("Click 'Refresh irth Layer List' to load current map layers")
         

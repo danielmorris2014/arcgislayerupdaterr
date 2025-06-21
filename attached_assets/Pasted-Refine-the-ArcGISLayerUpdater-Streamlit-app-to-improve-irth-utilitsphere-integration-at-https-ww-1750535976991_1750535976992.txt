@@ -1,0 +1,27 @@
+Refine the 'ArcGISLayerUpdater' Streamlit app to improve irth utilitsphere integration at https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx, addressing authentication issues, while preserving all existing functionality (authentication with ArcGIS Online, layer management, table editing, sublayer updates, sharing settings, and FeatureServer URL generation). The app should run locally using Streamlit and the ArcGIS API for Python, with these specific adjustments:
+
+Enhanced irth Authentication Attempt:
+Add an 'irth Integration' section with st.text_input for irth username and st.text_input(type='password') for password.
+Use requests with session handling to attempt login by sending a POST request to the inferred login endpoint (e.g., derived from the page’s form action or a common irth login URL like /login.aspx), including credentials in the payload.
+Handle potential MFA or session redirection by checking the response for a 200 status or successful navigation to the Manage Map Layers page, storing the session cookie in st.session_state if successful.
+If authentication fails (e.g., redirection to login page), display a st.warning message: 'Authentication failed, possibly due to MFA or session issues. Please log in manually and copy URLs.'
+Manual URL Input as Fallback:
+Provide a st.text_area labeled 'irth Map Layer URLs' for users to paste URLs manually if automated login fails, one per line.
+Add a note with st.write instructing: 'If automated login fails, log in at https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx and copy map layer URLs here.'
+Sync irth Map Layer URLs with ArcGIS:
+After updating or creating a feature layer in ArcGIS Online, include a ‘Sync with irth’ button (st.button).
+If automated login succeeds, fetch the Manage Map Layers page, parse URLs with BeautifulSoup (e.g., from <a> tags or tables), and allow selection via st.selectbox to map to the ArcGIS FeatureServer URL.
+If manual input is used, allow selection from pasted URLs and map to the ArcGIS URL.
+Display a success message (st.success) with the new FeatureServer URL and instructions to update irth manually if needed.
+Offer a CSV export (st.download_button) with ArcGIS layer titles, FeatureServer URLs, and matched irth URLs.
+Error Handling and Feedback:
+Use st.spinner during authentication and URL retrieval attempts.
+Handle errors (e.g., 403 Forbidden, parsing failures) with st.error, and include a debug mode (st.checkbox) to show raw responses with st.code.
+Add a st.warning if MFA is suspected, suggesting contact with https://irthsupport.irthsolutions.com/support/home.
+User Guidance:
+Include a link to https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx for manual login.
+Note that automated sync depends on successful login and page structure.
+General Improvements:
+Keep the irth section separate and compatible with existing file handling and session state.
+Avoid hardcoding endpoints; infer them from responses or user input.
+This refinement balances automated login attempts with a manual fallback, addressing authentication challenges without CAPTCHA, and prepares for irth URL management.
