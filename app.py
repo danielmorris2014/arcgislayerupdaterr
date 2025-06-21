@@ -871,11 +871,106 @@ def irth_integration():
                         st.session_state.irth_authenticated = False
                         
                         if debug_mode:
-                            st.write("**Troubleshooting Tips:**")
-                            st.write("- Verify your username and password are correct")
-                            st.write("- Check that your account has administrative privileges")
-                            st.write("- Try accessing the irth website manually first")
-                            st.write("- The page structure may have changed - contact support if issue persists")
+                            st.write("**Troubleshooting Analysis:**")
+                            st.write("- Form fields detected correctly")
+                            st.write("- Credentials submitted properly")
+                            st.write("- Redirected back to login page indicates possible:")
+                            st.write("  • CAPTCHA or security challenge required")
+                            st.write("  • Multi-factor authentication enabled")
+                            st.write("  • IP-based access restrictions")
+                            st.write("  • Session-specific validation")
+                        
+                        st.warning("**Alternative Solutions:**")
+                        st.write("1. **Manual Authentication**: Log in to irth manually, then copy/paste layer URLs")
+                        st.write("2. **CSV Import**: Export layer URLs from irth and import them using the demo mode")
+                        st.write("3. **Direct URL Entry**: Use the URL update feature with manually obtained layer URLs")
+                        
+                        # Provide manual URL entry option
+                        with st.expander("Manual Layer URL Entry"):
+                            st.write("If you can access irth manually, you can enter layer URLs here:")
+                            manual_layers = []
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                layer_name = st.text_input("Layer Name", key="manual_name")
+                            with col2:
+                                layer_url = st.text_input("Layer URL", key="manual_url")
+                            
+                            if st.button("Add Manual Layer") and layer_name and layer_url:
+                                if 'manual_irth_layers' not in st.session_state:
+                                    st.session_state.manual_irth_layers = []
+                                
+                                st.session_state.manual_irth_layers.append({
+                                    'name': layer_name,
+                                    'url': layer_url,
+                                    'id': len(st.session_state.manual_irth_layers) + 1,
+                                    'source': 'Manual entry'
+                                })
+                                
+                                st.session_state.irth_layers = st.session_state.manual_irth_layers
+                                st.success(f"Added layer: {layer_name}")
+                                st.rerun()
+                        
+                        # CSV Import option
+                        with st.expander("Import Layer URLs from CSV"):
+                            st.write("**Step 1: Download Template**")
+                            with open("irth_layers_template.csv", "r") as f:
+                                template_csv = f.read()
+                            
+                            st.download_button(
+                                label="📄 Download CSV Template",
+                                data=template_csv,
+                                file_name="irth_layers_template.csv",
+                                mime="text/csv"
+                            )
+                            
+                            st.write("**Step 2: Manual Extraction Instructions**")
+                            st.info("""
+                            To get layer URLs from irth manually:
+                            1. Log into irth utilitsphere in your browser
+                            2. Navigate to the Maps or Layers management section
+                            3. Find your map layers and right-click to inspect
+                            4. Look for URLs containing 'MapServer' or 'FeatureServer'
+                            5. Copy these URLs and layer names into the template
+                            6. Upload the completed CSV file below
+                            """)
+                            
+                            st.write("**Step 3: Upload Completed CSV**")
+                            uploaded_file = st.file_uploader("Choose CSV file", type="csv", key="csv_import")
+                            
+                            if uploaded_file is not None:
+                                try:
+                                    df = pd.read_csv(uploaded_file)
+                                    
+                                    if 'name' in df.columns and 'url' in df.columns:
+                                        imported_layers = []
+                                        for _, row in df.iterrows():
+                                            imported_layers.append({
+                                                'name': row['name'],
+                                                'url': row['url'],
+                                                'id': len(imported_layers) + 1,
+                                                'source': 'CSV import'
+                                            })
+                                        
+                                        st.session_state.irth_layers = imported_layers
+                                        st.success(f"Imported {len(imported_layers)} layers from CSV")
+                                        st.rerun()
+                                    else:
+                                        st.error("CSV must contain 'name' and 'url' columns")
+                                except Exception as e:
+                                    st.error(f"Error reading CSV: {str(e)}")
+                        
+                        # Display current manual layers
+                        if 'manual_irth_layers' in st.session_state and st.session_state.manual_irth_layers:
+                            st.write("**Current Manual Layers:**")
+                            manual_df = pd.DataFrame(st.session_state.manual_irth_layers)
+                            st.dataframe(manual_df[['name', 'url', 'source']], use_container_width=True)
+                            
+                            if st.button("Clear Manual Layers"):
+                                st.session_state.manual_irth_layers = []
+                                if 'irth_layers' in st.session_state:
+                                    del st.session_state.irth_layers
+                                st.rerun()
             else:
                 st.warning("Please enter both username and password")
     

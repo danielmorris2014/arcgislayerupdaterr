@@ -1,0 +1,5 @@
+name,url
+Water Main Network,https://maps.example.com/arcgis/services/Water/MainNetwork/MapServer
+Sewer System,https://maps.example.com/arcgis/services/Sewer/SewerLines/MapServer
+Gas Distribution,https://maps.example.com/arcgis/services/Gas/Distribution/MapServer
+Electric Grid,https://maps.example.com/arcgis/services/Electric/PowerLines/MapServer
