@@ -239,146 +239,395 @@ def validate_coordinate_system(gdf, target_layer=None):
     
     return gdf, True
 
-def authenticate_irth(username, password):
-    """Authenticate with irth utilitsphere and return session"""
+def authenticate_irth(username, password, debug_mode=False):
+    """Enhanced irth utilitsphere authentication with robust session handling"""
     session = requests.Session()
     
+    # Set browser headers to simulate real browser behavior
+    session.headers.update({
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1'
+    })
+    
     try:
-        # Get login page to retrieve any required tokens
-        login_url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
-        login_page = session.get(login_url, timeout=10)
+        # First, try to access the main irth page to establish session
+        main_url = "https://www.irth.com"
+        if debug_mode:
+            st.write(f"🔍 Accessing main page: {main_url}")
         
-        if login_page.status_code != 200:
-            return None, "Unable to access irth login page"
+        main_response = session.get(main_url, timeout=15)
+        if debug_mode:
+            st.write(f"Main page status: {main_response.status_code}")
         
-        # Parse for any form tokens or viewstate
-        soup = BeautifulSoup(login_page.content, 'html.parser')
+        # Look for login form or redirect to login page
+        soup = BeautifulSoup(main_response.content, 'html.parser')
         
-        # Prepare login data (this may need adjustment based on actual form structure)
-        login_data = {
-            'username': username,
-            'password': password
-        }
+        # Try to find login form or login page URL
+        login_form = soup.find('form', {'id': 'loginForm'}) or soup.find('form', {'name': 'loginForm'})
+        login_links = soup.find_all('a', href=True)
         
-        # Look for common form fields
-        for input_field in soup.find_all('input', type='hidden'):
-            name = input_field.get('name')
-            value = input_field.get('value', '')
+        login_url = None
+        for link in login_links:
+            href = link.get('href', '').lower()
+            if 'login' in href or 'signin' in href or 'auth' in href:
+                if href.startswith('http'):
+                    login_url = href
+                else:
+                    login_url = f"https://www.irth.com{href}" if href.startswith('/') else f"https://www.irth.com/{href}"
+                break
+        
+        # If no specific login URL found, try common endpoints
+        if not login_url:
+            potential_login_urls = [
+                "https://www.irth.com/login",
+                "https://www.irth.com/signin",
+                "https://www.irth.com/auth/login",
+                "https://www.irth.com/Utilisphere/login",
+                "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
+            ]
+            
+            for test_url in potential_login_urls:
+                try:
+                    test_response = session.get(test_url, timeout=10)
+                    if test_response.status_code == 200:
+                        test_soup = BeautifulSoup(test_response.content, 'html.parser')
+                        # Look for password input field as indicator of login page
+                        if test_soup.find('input', {'type': 'password'}) or test_soup.find('input', {'name': re.compile(r'pass', re.I)}):
+                            login_url = test_url
+                            if debug_mode:
+                                st.write(f"🔍 Found login page: {login_url}")
+                            break
+                except:
+                    continue
+        
+        if not login_url:
+            return None, "Could not locate irth login page"
+        
+        # Get the login page
+        if debug_mode:
+            st.write(f"🔍 Accessing login page: {login_url}")
+        
+        login_response = session.get(login_url, timeout=15)
+        if login_response.status_code != 200:
+            return None, f"Cannot access login page (Status: {login_response.status_code})"
+        
+        # Parse login form
+        login_soup = BeautifulSoup(login_response.content, 'html.parser')
+        
+        if debug_mode:
+            st.write(f"Login page title: {login_soup.title.string if login_soup.title else 'No title'}")
+            st.write(f"Login page size: {len(login_response.content)} bytes")
+        
+        # Find login form
+        login_form = (login_soup.find('form') or 
+                     login_soup.find('form', {'method': 'post'}) or
+                     login_soup.find('form', {'id': re.compile(r'login', re.I)}) or
+                     login_soup.find('form', {'name': re.compile(r'login', re.I)}))
+        
+        if not login_form:
+            if debug_mode:
+                st.code(f"No login form found. Page content sample:\n{login_soup.get_text()[:500]}")
+            return None, "No login form found on the page"
+        
+        # Extract form action URL
+        form_action = login_form.get('action', '')
+        if form_action:
+            if form_action.startswith('http'):
+                post_url = form_action
+            elif form_action.startswith('/'):
+                post_url = f"https://www.irth.com{form_action}"
+            else:
+                post_url = f"{login_url.rsplit('/', 1)[0]}/{form_action}"
+        else:
+            post_url = login_url
+        
+        if debug_mode:
+            st.write(f"🔍 Form action URL: {post_url}")
+        
+        # Prepare login data
+        login_data = {}
+        
+        # Add all hidden fields
+        for hidden_input in login_form.find_all('input', {'type': 'hidden'}):
+            name = hidden_input.get('name')
+            value = hidden_input.get('value', '')
             if name:
                 login_data[name] = value
         
-        # Attempt login
-        response = session.post(login_url, data=login_data, timeout=10)
+        # Find username and password field names
+        username_field = None
+        password_field = None
         
-        # Check if login was successful (adjust based on actual response)
-        if "ManageMapLayers" in response.url or response.status_code == 200:
+        for input_field in login_form.find_all('input'):
+            input_type = input_field.get('type', '').lower()
+            input_name = input_field.get('name', '').lower()
+            input_id = input_field.get('id', '').lower()
+            
+            if input_type == 'password' or 'password' in input_name or 'pass' in input_name:
+                password_field = input_field.get('name')
+            elif (input_type in ['text', 'email'] or 
+                  'user' in input_name or 'email' in input_name or 'login' in input_name or
+                  'user' in input_id or 'email' in input_id or 'login' in input_id):
+                username_field = input_field.get('name')
+        
+        # Set default field names if not found
+        if not username_field:
+            username_field = 'username'
+        if not password_field:
+            password_field = 'password'
+        
+        login_data[username_field] = username
+        login_data[password_field] = password
+        
+        if debug_mode:
+            st.write(f"🔍 Username field: {username_field}")
+            st.write(f"🔍 Password field: {password_field}")
+            st.write(f"🔍 Form data keys: {list(login_data.keys())}")
+        
+        # Submit login form
+        login_submit_response = session.post(post_url, data=login_data, timeout=15, allow_redirects=True)
+        
+        if debug_mode:
+            st.write(f"Login response status: {login_submit_response.status_code}")
+            st.write(f"Login response URL: {login_submit_response.url}")
+        
+        # Check if login was successful
+        success_indicators = [
+            'ManageMapLayers' in login_submit_response.url,
+            'dashboard' in login_submit_response.url.lower(),
+            'admin' in login_submit_response.url.lower(),
+            'welcome' in login_submit_response.text.lower(),
+            'logout' in login_submit_response.text.lower()
+        ]
+        
+        error_indicators = [
+            'login failed' in login_submit_response.text.lower(),
+            'invalid' in login_submit_response.text.lower(),
+            'error' in login_submit_response.text.lower(),
+            'incorrect' in login_submit_response.text.lower()
+        ]
+        
+        if any(success_indicators) and not any(error_indicators):
             return session, None
+        elif any(error_indicators):
+            return None, "Authentication failed - invalid credentials"
         else:
-            return None, "Authentication failed - please check credentials"
+            # Try to access the target page to verify login
+            target_url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
+            test_response = session.get(target_url, timeout=10)
+            
+            if test_response.status_code == 200 and 'login' not in test_response.url.lower():
+                return session, None
+            else:
+                return None, "Authentication may have failed - cannot access management page"
             
     except requests.RequestException as e:
         return None, f"Connection error: {str(e)}"
     except Exception as e:
         return None, f"Authentication error: {str(e)}"
 
-def get_irth_map_layers(session):
-    """Retrieve map layer URLs from irth utilitsphere with enhanced parsing"""
+def get_irth_map_layers(session, debug_mode=False):
+    """Enhanced retrieval of map layer URLs from irth utilitsphere with multiple parsing strategies"""
     try:
         url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
-        response = session.get(url, timeout=10)
         
-        if response.status_code != 200:
+        if debug_mode:
+            st.write(f"🔍 Fetching map layers from: {url}")
+        
+        response = session.get(url, timeout=15)
+        
+        if response.status_code == 403:
+            return [], "Access forbidden - please check your irth credentials have administrative access"
+        elif response.status_code == 404:
+            return [], "Map layers page not found - URL may have changed"
+        elif response.status_code != 200:
             return [], f"Unable to access map layers page (Status: {response.status_code})"
+        
+        # Check if redirected to login page
+        if 'login' in response.url.lower() or 'signin' in response.url.lower():
+            return [], "Session expired - please re-authenticate with irth"
         
         soup = BeautifulSoup(response.content, 'html.parser')
         layers = []
         
-        # Debug information
-        st.write("**Debug Information:**")
-        st.write(f"Page title: {soup.title.string if soup.title else 'No title found'}")
-        st.write(f"Page size: {len(response.content)} bytes")
+        if debug_mode:
+            st.write("**Debug Information:**")
+            st.write(f"Page title: {soup.title.string if soup.title else 'No title found'}")
+            st.write(f"Page size: {len(response.content)} bytes")
+            st.write(f"Final URL: {response.url}")
         
-        # Method 1: Look for tables containing layer information
+        # Strategy 1: Look for tables with layer data
         tables = soup.find_all('table')
-        st.write(f"Found {len(tables)} tables on the page")
+        if debug_mode:
+            st.write(f"Found {len(tables)} tables")
         
         for i, table in enumerate(tables):
-            rows = table.find_all('tr')
-            st.write(f"Table {i+1}: {len(rows)} rows")
+            # Look for table headers that suggest layer data
+            headers = table.find_all(['th', 'thead'])
+            header_text = ' '.join([h.get_text().lower() for h in headers])
             
-            for j, row in enumerate(rows):
-                cells = row.find_all(['td', 'th'])
-                if len(cells) >= 2:
-                    cell_texts = [cell.get_text(strip=True) for cell in cells]
-                    
-                    # Look for URLs in any cell
-                    for k, cell_text in enumerate(cell_texts):
-                        if any(pattern in cell_text.lower() for pattern in ['http', 'featureserver', 'mapserver', 'arcgis']):
-                            layer_name = cell_texts[0] if k > 0 else f"Layer_{len(layers)+1}"
-                            layers.append({
-                                'name': layer_name,
-                                'url': cell_text,
-                                'id': len(layers) + 1,
-                                'source': f'Table {i+1}, Row {j+1}, Cell {k+1}'
-                            })
+            if any(keyword in header_text for keyword in ['layer', 'url', 'service', 'map']):
+                rows = table.find_all('tr')[1:]  # Skip header row
+                
+                for j, row in enumerate(rows):
+                    cells = row.find_all(['td', 'th'])
+                    if len(cells) >= 2:
+                        cell_texts = [cell.get_text(strip=True) for cell in cells]
+                        
+                        # Look for URLs in cells
+                        for k, cell_text in enumerate(cell_texts):
+                            if any(pattern in cell_text.lower() for pattern in 
+                                  ['http', 'featureserver', 'mapserver', 'arcgis', 'rest/services']):
+                                layer_name = cell_texts[0] if k > 0 else f"Layer_{len(layers)+1}"
+                                
+                                # Also check for links within cells
+                                cell = cells[k]
+                                links = cell.find_all('a', href=True)
+                                for link in links:
+                                    href = link.get('href')
+                                    if href and any(pattern in href.lower() for pattern in 
+                                                  ['featureserver', 'mapserver', 'rest/services']):
+                                        layers.append({
+                                            'name': layer_name,
+                                            'url': href,
+                                            'id': len(layers) + 1,
+                                            'source': f'Table {i+1}, Row {j+1} (link)'
+                                        })
+                                
+                                # Add text-based URL if found
+                                if cell_text != layer_name:
+                                    layers.append({
+                                        'name': layer_name,
+                                        'url': cell_text,
+                                        'id': len(layers) + 1,
+                                        'source': f'Table {i+1}, Row {j+1} (text)'
+                                    })
         
-        # Method 2: Look for input fields containing URLs
+        # Strategy 2: Look for ASP.NET controls and form elements
         inputs = soup.find_all('input')
-        st.write(f"Found {len(inputs)} input fields")
+        textareas = soup.find_all('textarea')
+        selects = soup.find_all('select')
         
-        for inp in inputs:
-            value = inp.get('value', '')
-            name = inp.get('name', '')
-            input_type = inp.get('type', 'text')
+        all_form_elements = inputs + textareas + selects
+        
+        if debug_mode:
+            st.write(f"Found {len(all_form_elements)} form elements")
+        
+        for element in all_form_elements:
+            value = element.get('value', '') or element.get_text(strip=True)
+            name = element.get('name', '') or element.get('id', '')
             
-            if value and any(pattern in value.lower() for pattern in ['http', 'featureserver', 'mapserver', 'arcgis']):
+            if value and any(pattern in value.lower() for pattern in 
+                           ['http', 'featureserver', 'mapserver', 'rest/services', 'arcgis']):
                 layers.append({
-                    'name': name or f'Input_{len(layers)+1}',
+                    'name': name or f'Form_Element_{len(layers)+1}',
                     'url': value,
                     'id': len(layers) + 1,
-                    'source': f'Input field ({input_type}): {name}'
+                    'source': f'Form element: {element.name} ({name})'
                 })
         
-        # Method 3: Look for div or span elements containing URLs
-        divs = soup.find_all(['div', 'span', 'p'])
-        url_pattern = re.compile(r'https?://[^\s<>"]+(?:featureserver|mapserver|arcgis)[^\s<>"]*', re.IGNORECASE)
+        # Strategy 3: Look for hyperlinks
+        links = soup.find_all('a', href=True)
+        if debug_mode:
+            st.write(f"Found {len(links)} links")
         
-        for div in divs:
-            text = div.get_text()
-            urls = url_pattern.findall(text)
-            for url_match in urls:
+        for link in links:
+            href = link.get('href')
+            link_text = link.get_text(strip=True)
+            
+            if href and any(pattern in href.lower() for pattern in 
+                          ['featureserver', 'mapserver', 'rest/services']):
                 layers.append({
-                    'name': f'URL_{len(layers)+1}',
-                    'url': url_match,
+                    'name': link_text or f'Link_{len(layers)+1}',
+                    'url': href,
                     'id': len(layers) + 1,
-                    'source': f'Text content: {div.name}'
+                    'source': 'Hyperlink'
                 })
         
-        # Method 4: Look for any text that looks like a URL
+        # Strategy 4: Look for JavaScript variables or configuration
+        scripts = soup.find_all('script')
+        for script in scripts:
+            script_text = script.get_text()
+            if script_text:
+                # Look for common patterns in JavaScript
+                js_patterns = [
+                    r'["\']https?://[^"\']*(?:featureserver|mapserver|rest/services)[^"\']*["\']',
+                    r'serviceUrl\s*[:=]\s*["\'][^"\']+["\']',
+                    r'layerUrl\s*[:=]\s*["\'][^"\']+["\']'
+                ]
+                
+                for pattern in js_patterns:
+                    matches = re.findall(pattern, script_text, re.IGNORECASE)
+                    for match in matches:
+                        clean_url = match.strip('"\'')
+                        if not any(layer['url'] == clean_url for layer in layers):
+                            layers.append({
+                                'name': f'JS_Config_{len(layers)+1}',
+                                'url': clean_url,
+                                'id': len(layers) + 1,
+                                'source': 'JavaScript configuration'
+                            })
+        
+        # Strategy 5: Regular expression scan of entire page
+        url_pattern = re.compile(
+            r'https?://[^\s<>"\']+(?:featureserver|mapserver|rest/services)[^\s<>"\']*',
+            re.IGNORECASE
+        )
+        
         page_text = soup.get_text()
         all_urls = url_pattern.findall(page_text)
+        
         for url_match in all_urls:
-            if not any(layer['url'] == url_match for layer in layers):  # Avoid duplicates
+            if not any(layer['url'] == url_match for layer in layers):
                 layers.append({
-                    'name': f'Found_URL_{len(layers)+1}',
+                    'name': f'Pattern_Match_{len(layers)+1}',
                     'url': url_match,
                     'id': len(layers) + 1,
-                    'source': 'Page text scan'
+                    'source': 'Pattern matching'
                 })
         
-        # If still no layers found, provide more debugging info
-        if not layers:
-            st.write("**No layers found. Page content sample:**")
-            page_sample = soup.get_text()[:1000] + "..." if len(soup.get_text()) > 1000 else soup.get_text()
-            st.text_area("Page content", page_sample, height=200)
+        # Remove duplicates based on URL
+        unique_layers = []
+        seen_urls = set()
+        for layer in layers:
+            if layer['url'] not in seen_urls:
+                seen_urls.add(layer['url'])
+                unique_layers.append(layer)
+        
+        layers = unique_layers
+        
+        if debug_mode:
+            st.write(f"**Total unique layers found: {len(layers)}**")
             
-            # Show all form elements for debugging
-            forms = soup.find_all('form')
-            st.write(f"Found {len(forms)} forms")
-            for i, form in enumerate(forms):
-                st.write(f"Form {i+1} action: {form.get('action', 'No action')}")
-                form_inputs = form.find_all('input')
-                st.write(f"Form {i+1} has {len(form_inputs)} inputs")
+            if not layers:
+                st.write("**Debugging - No layers found. Page analysis:**")
+                
+                # Show page structure
+                st.write("Page structure:")
+                structure_info = []
+                for tag in ['table', 'form', 'input', 'a', 'script']:
+                    count = len(soup.find_all(tag))
+                    structure_info.append(f"{tag}: {count}")
+                st.write(", ".join(structure_info))
+                
+                # Show page content sample
+                page_sample = soup.get_text()[:1000]
+                if page_sample:
+                    st.text_area("Page content sample", page_sample, height=200)
+                
+                # Show form details
+                forms = soup.find_all('form')
+                if forms:
+                    st.write(f"**Form details ({len(forms)} forms):**")
+                    for i, form in enumerate(forms):
+                        st.write(f"Form {i+1}:")
+                        st.write(f"  - Action: {form.get('action', 'None')}")
+                        st.write(f"  - Method: {form.get('method', 'None')}")
+                        st.write(f"  - Inputs: {len(form.find_all('input'))}")
         
         return layers, None
         
@@ -445,6 +694,9 @@ def irth_integration():
     # irth Authentication Section
     st.subheader("🔐 irth Authentication")
     
+    # Debug mode toggle
+    debug_mode = st.checkbox("Enable Debug Mode", help="Show detailed authentication and parsing information")
+    
     with st.form("irth_auth_form"):
         col1, col2 = st.columns(2)
         
@@ -461,20 +713,31 @@ def irth_integration():
                 help="Enter your irth utilitsphere password"
             )
         
+        st.write("**Important:** Ensure your irth credentials have administrative access to Manage Map Layers")
+        st.write("Manual verification: [irth Manage Map Layers](https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx)")
+        
         authenticate_button = st.form_submit_button("Authenticate with irth", type="primary")
         
         if authenticate_button:
             if irth_username and irth_password:
                 with st.spinner("Authenticating with irth utilitsphere..."):
-                    session, error = authenticate_irth(irth_username, irth_password)
+                    session, error = authenticate_irth(irth_username, irth_password, debug_mode)
                     
                     if session:
                         st.session_state.irth_session = session
                         st.session_state.irth_authenticated = True
+                        st.session_state.irth_debug_mode = debug_mode
                         st.success("Successfully authenticated with irth utilitsphere!")
                     else:
-                        st.error(f"Authentication failed: {error}")
+                        st.error(f"Failed to log in to irth: {error}")
                         st.session_state.irth_authenticated = False
+                        
+                        if debug_mode:
+                            st.write("**Troubleshooting Tips:**")
+                            st.write("- Verify your username and password are correct")
+                            st.write("- Check that your account has administrative privileges")
+                            st.write("- Try accessing the irth website manually first")
+                            st.write("- The page structure may have changed - contact support if issue persists")
             else:
                 st.warning("Please enter both username and password")
     
@@ -485,13 +748,31 @@ def irth_integration():
         col1, col2 = st.columns(2)
         with col1:
             if st.button("Refresh irth Layer List", type="secondary"):
+                debug_mode = st.session_state.get('irth_debug_mode', False)
                 with st.spinner("Retrieving irth map layers..."):
-                    layers, error = get_irth_map_layers(st.session_state.irth_session)
+                    layers, error = get_irth_map_layers(st.session_state.irth_session, debug_mode)
                     
                     if error:
-                        st.error(f"Error retrieving layers: {error}")
+                        if "403" in error:
+                            st.error("Access forbidden - please check your irth credentials have administrative access")
+                        elif "404" in error:
+                            st.error("No layer URLs detected on page - page structure may have changed")
+                        elif "expired" in error.lower():
+                            st.error("Session expired - please re-authenticate with irth")
+                        else:
+                            st.error(f"No layer URLs detected: {error}")
+                        
+                        if debug_mode:
+                            st.write("**Troubleshooting:**")
+                            st.write("- Verify page structure hasn't changed")
+                            st.write("- Check if JavaScript is loading layer data dynamically")
+                            st.write("- Try the demo mode to test the interface")
                     else:
                         st.session_state.irth_layers = layers
+                        if layers:
+                            st.success(f"Successfully retrieved {len(layers)} layer URLs from irth")
+                        else:
+                            st.warning("Connected to irth but no layer URLs found on the page")
         
         with col2:
             if st.button("Use Demo Mode", type="secondary", help="Test with sample data"):
