@@ -282,49 +282,103 @@ def authenticate_irth(username, password):
         return None, f"Authentication error: {str(e)}"
 
 def get_irth_map_layers(session):
-    """Retrieve map layer URLs from irth utilitsphere"""
+    """Retrieve map layer URLs from irth utilitsphere with enhanced parsing"""
     try:
         url = "https://www.irth.com/Utilisphere/Administration/ManageMapLayers/ManageMapLayers.aspx"
         response = session.get(url, timeout=10)
         
         if response.status_code != 200:
-            return [], "Unable to access map layers page"
+            return [], f"Unable to access map layers page (Status: {response.status_code})"
         
         soup = BeautifulSoup(response.content, 'html.parser')
         layers = []
         
-        # Look for tables or divs containing layer information
-        # This parsing logic may need adjustment based on actual page structure
+        # Debug information
+        st.write("**Debug Information:**")
+        st.write(f"Page title: {soup.title.string if soup.title else 'No title found'}")
+        st.write(f"Page size: {len(response.content)} bytes")
+        
+        # Method 1: Look for tables containing layer information
         tables = soup.find_all('table')
-        for table in tables:
+        st.write(f"Found {len(tables)} tables on the page")
+        
+        for i, table in enumerate(tables):
             rows = table.find_all('tr')
-            for row in rows[1:]:  # Skip header row
+            st.write(f"Table {i+1}: {len(rows)} rows")
+            
+            for j, row in enumerate(rows):
                 cells = row.find_all(['td', 'th'])
                 if len(cells) >= 2:
-                    # Extract layer information
-                    layer_name = cells[0].get_text(strip=True)
-                    layer_url = cells[1].get_text(strip=True)
+                    cell_texts = [cell.get_text(strip=True) for cell in cells]
                     
-                    # Look for URLs that contain "FeatureServer" or similar patterns
-                    if layer_url and ('http' in layer_url.lower() or 'featureserver' in layer_url.lower()):
-                        layers.append({
-                            'name': layer_name,
-                            'url': layer_url,
-                            'id': len(layers) + 1
-                        })
+                    # Look for URLs in any cell
+                    for k, cell_text in enumerate(cell_texts):
+                        if any(pattern in cell_text.lower() for pattern in ['http', 'featureserver', 'mapserver', 'arcgis']):
+                            layer_name = cell_texts[0] if k > 0 else f"Layer_{len(layers)+1}"
+                            layers.append({
+                                'name': layer_name,
+                                'url': cell_text,
+                                'id': len(layers) + 1,
+                                'source': f'Table {i+1}, Row {j+1}, Cell {k+1}'
+                            })
         
-        # If no table structure found, try alternative parsing
+        # Method 2: Look for input fields containing URLs
+        inputs = soup.find_all('input')
+        st.write(f"Found {len(inputs)} input fields")
+        
+        for inp in inputs:
+            value = inp.get('value', '')
+            name = inp.get('name', '')
+            input_type = inp.get('type', 'text')
+            
+            if value and any(pattern in value.lower() for pattern in ['http', 'featureserver', 'mapserver', 'arcgis']):
+                layers.append({
+                    'name': name or f'Input_{len(layers)+1}',
+                    'url': value,
+                    'id': len(layers) + 1,
+                    'source': f'Input field ({input_type}): {name}'
+                })
+        
+        # Method 3: Look for div or span elements containing URLs
+        divs = soup.find_all(['div', 'span', 'p'])
+        url_pattern = re.compile(r'https?://[^\s<>"]+(?:featureserver|mapserver|arcgis)[^\s<>"]*', re.IGNORECASE)
+        
+        for div in divs:
+            text = div.get_text()
+            urls = url_pattern.findall(text)
+            for url_match in urls:
+                layers.append({
+                    'name': f'URL_{len(layers)+1}',
+                    'url': url_match,
+                    'id': len(layers) + 1,
+                    'source': f'Text content: {div.name}'
+                })
+        
+        # Method 4: Look for any text that looks like a URL
+        page_text = soup.get_text()
+        all_urls = url_pattern.findall(page_text)
+        for url_match in all_urls:
+            if not any(layer['url'] == url_match for layer in layers):  # Avoid duplicates
+                layers.append({
+                    'name': f'Found_URL_{len(layers)+1}',
+                    'url': url_match,
+                    'id': len(layers) + 1,
+                    'source': 'Page text scan'
+                })
+        
+        # If still no layers found, provide more debugging info
         if not layers:
-            # Look for input fields or other elements containing URLs
-            inputs = soup.find_all('input')
-            for inp in inputs:
-                value = inp.get('value', '')
-                if 'featureserver' in value.lower() or 'mapserver' in value.lower():
-                    layers.append({
-                        'name': inp.get('name', f'Layer_{len(layers)+1}'),
-                        'url': value,
-                        'id': len(layers) + 1
-                    })
+            st.write("**No layers found. Page content sample:**")
+            page_sample = soup.get_text()[:1000] + "..." if len(soup.get_text()) > 1000 else soup.get_text()
+            st.text_area("Page content", page_sample, height=200)
+            
+            # Show all form elements for debugging
+            forms = soup.find_all('form')
+            st.write(f"Found {len(forms)} forms")
+            for i, form in enumerate(forms):
+                st.write(f"Form {i+1} action: {form.get('action', 'No action')}")
+                form_inputs = form.find_all('input')
+                st.write(f"Form {i+1} has {len(form_inputs)} inputs")
         
         return layers, None
         
@@ -428,14 +482,42 @@ def irth_integration():
     if st.session_state.get('irth_authenticated', False) and 'irth_session' in st.session_state:
         st.subheader("📋 View irth Map Layer URLs")
         
-        if st.button("Refresh irth Layer List", type="secondary"):
-            with st.spinner("Retrieving irth map layers..."):
-                layers, error = get_irth_map_layers(st.session_state.irth_session)
-                
-                if error:
-                    st.error(f"Error retrieving layers: {error}")
-                else:
-                    st.session_state.irth_layers = layers
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Refresh irth Layer List", type="secondary"):
+                with st.spinner("Retrieving irth map layers..."):
+                    layers, error = get_irth_map_layers(st.session_state.irth_session)
+                    
+                    if error:
+                        st.error(f"Error retrieving layers: {error}")
+                    else:
+                        st.session_state.irth_layers = layers
+        
+        with col2:
+            if st.button("Use Demo Mode", type="secondary", help="Test with sample data"):
+                # Provide demo data for testing
+                demo_layers = [
+                    {
+                        'name': 'Water Utilities Layer',
+                        'url': 'https://services.arcgis.com/example/ArcGIS/rest/services/WaterUtilities/FeatureServer/0',
+                        'id': 1,
+                        'source': 'Demo data'
+                    },
+                    {
+                        'name': 'Electric Grid Layer',
+                        'url': 'https://services.arcgis.com/example/ArcGIS/rest/services/ElectricGrid/FeatureServer/0',
+                        'id': 2,
+                        'source': 'Demo data'
+                    },
+                    {
+                        'name': 'Gas Infrastructure',
+                        'url': 'https://services.arcgis.com/example/ArcGIS/rest/services/GasInfra/FeatureServer/0',
+                        'id': 3,
+                        'source': 'Demo data'
+                    }
+                ]
+                st.session_state.irth_layers = demo_layers
+                st.success("Demo mode activated with sample layer data")
         
         # Display current irth layers
         if 'irth_layers' in st.session_state and st.session_state.irth_layers:
@@ -545,6 +627,37 @@ def irth_integration():
     
     else:
         st.info("Please authenticate with irth utilitsphere to view and update map layers")
+        
+        # Add demo mode for testing without authentication
+        st.subheader("🧪 Demo Mode")
+        st.write("Test the irth integration interface with sample data (no authentication required)")
+        
+        if st.button("Enable Demo Mode", type="secondary"):
+            st.session_state.irth_authenticated = True
+            st.session_state.irth_session = "demo_session"
+            demo_layers = [
+                {
+                    'name': 'Water Distribution Network',
+                    'url': 'https://services.arcgis.com/demo/ArcGIS/rest/services/WaterDistribution/FeatureServer/0',
+                    'id': 1,
+                    'source': 'Demo data'
+                },
+                {
+                    'name': 'Electric Transmission Lines',
+                    'url': 'https://services.arcgis.com/demo/ArcGIS/rest/services/ElectricTransmission/FeatureServer/0',
+                    'id': 2,
+                    'source': 'Demo data'
+                },
+                {
+                    'name': 'Gas Pipeline Infrastructure',
+                    'url': 'https://services.arcgis.com/demo/ArcGIS/rest/services/GasPipeline/FeatureServer/0',
+                    'id': 3,
+                    'source': 'Demo data'
+                }
+            ]
+            st.session_state.irth_layers = demo_layers
+            st.success("Demo mode enabled! You can now test the irth integration features.")
+            st.rerun()
 
 def apply_sharing_settings(item, sharing_level):
     """Apply sharing settings to an item"""
