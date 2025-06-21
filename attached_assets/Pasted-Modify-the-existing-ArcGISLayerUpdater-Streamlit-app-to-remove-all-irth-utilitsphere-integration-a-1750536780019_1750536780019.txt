@@ -1,0 +1,147 @@
+Modify the existing 'ArcGISLayerUpdater' Streamlit app to remove all irth utilitsphere integration and focus solely on managing ArcGIS Online feature layers. The app should run locally using Streamlit and the ArcGIS API for Python, providing FeatureServer URLs for manual integration with irth. Include the following features:
+
+
+
+
+
+Authentication:
+
+
+
+
+
+Use st.text_input for username and st.text_input(type='password') for password to log into ArcGIS Online.
+
+
+
+Store the GIS object in st.session_state for reuse.
+
+
+
+View Existing Feature Layers:
+
+
+
+
+
+Display a list of the user's hosted feature layers using gis.content.search with type='Feature Service'.
+
+
+
+Use st.selectbox or st.multiselect for layer selection.
+
+
+
+Update Existing Layers:
+
+
+
+
+
+Let the user select a feature layer and upload a .zip file with an updated shapefile.
+
+
+
+Update the layer using FeatureLayerCollection.manager.overwrite.
+
+
+
+Show the FeatureServer URL with st.write.
+
+
+
+Create New Layers:
+
+
+
+
+
+Allow uploading a .zip file and entering a title for a new feature layer.
+
+
+
+Optionally let the user select web maps to add the layer to.
+
+
+
+Publish the layer with gis.content.add and item.publish, adding it to selected maps if chosen.
+
+
+
+Display the FeatureServer URL.
+
+
+
+Merge Layers:
+
+
+
+
+
+Enable selecting multiple feature layers to merge.
+
+
+
+Combine them into a new layer using a method like FeatureLayerCollection.manager.append or a custom merge function.
+
+
+
+Ask for a title for the merged layer, publish it, and show its FeatureServer URL.
+
+
+
+Delete Layers:
+
+
+
+
+
+Allow selecting a feature layer for deletion.
+
+
+
+Require confirmation (e.g., st.button) to avoid accidental deletion.
+
+
+
+Delete the layer with delete and confirm with st.success.
+
+
+
+Error Handling and Feedback:
+
+
+
+
+
+Use st.error for failures, st.success for completions, and st.spinner during processing.
+
+
+
+User Interface:
+
+
+
+
+
+Divide the app into sections: Update Layer, Create Layer, Merge Layers, Delete Layer.
+
+
+
+Use st.columns or st.expander for a clean layout.
+
+
+
+Security and Cleanup:
+
+
+
+
+
+Secure credentials with Streamlit secrets if possible.
+
+
+
+Use temporary directories for shapefiles and clean up after operations.
+
+The app should provide FeatureServer URLs for manual entry into irth after each operation.
