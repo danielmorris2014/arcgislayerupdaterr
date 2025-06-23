@@ -538,9 +538,12 @@ def create_new_layer():
                         if layer_description:
                             item_properties['description'] = layer_description
                         
-                        # Create temporary zip for upload with unique name
+                        # Create temporary zip for upload using layer title
+                        # Clean the title for safe filename use
+                        safe_title = "".join(c for c in layer_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                        safe_title = safe_title.replace(' ', '_')
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        unique_zip_name = f"layer_{timestamp}.zip"
+                        unique_zip_name = f"{safe_title}_{timestamp}.zip"
                         temp_zip_path = os.path.join(temp_dir, unique_zip_name)
                         with zipfile.ZipFile(temp_zip_path, 'w') as zip_ref:
                             for root, dirs, files in os.walk(temp_dir):
@@ -717,10 +720,13 @@ def merge_layers():
                             st.warning(f"Could not process layer {layer.title}: {str(e)}")
                     
                     if merged_gdf is not None and len(merged_gdf) > 0:
-                        # Save merged data to temporary shapefile with unique name
+                        # Save merged data to temporary shapefile using merged layer title
                         temp_dir = tempfile.mkdtemp()
+                        # Clean the title for safe filename use
+                        safe_title = "".join(c for c in merged_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
+                        safe_title = safe_title.replace(' ', '_')
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        shapefile_name = f"merged_{timestamp}"
+                        shapefile_name = f"{safe_title}_{timestamp}"
                         shapefile_path = os.path.join(temp_dir, f"{shapefile_name}.shp")
                         
                         # Convert to GeoDataFrame if needed
