@@ -1,0 +1,157 @@
+Enhance the existing 'ArcGISLayerUpdater' Streamlit app to include layer styling, popup control, advanced data management, and the ability to customize new layers during the creation process, while preserving all current functionality (authentication, viewing, updating, creating, merging, and deleting layers, as well as displaying FeatureServer URLs). The app should run locally using Streamlit and the ArcGIS API for Python. Implement the following improvements:
+
+
+
+
+
+Layer Editor Section:
+
+
+
+
+
+Add a 'Layer Editor' section in the sidebar navigation.
+
+
+
+Use expanders within this section for:
+
+
+
+
+
+Symbology: Allow users to select an existing layer and set its color with st.color_picker. Update the layer’s symbology using a simple renderer based on its geometry type:
+
+
+
+
+
+Points: Simple marker symbol with the chosen color.
+
+
+
+Lines: Simple line symbol with the chosen color.
+
+
+
+Polygons: Simple fill symbol with the chosen color.
+
+
+
+Popups: Provide a checkbox to enable/disable popups. If enabled, use st.multiselect to select fields for display in the popup. If disabled, set popupInfo to None.
+
+
+
+Data Management: Include options to:
+
+
+
+
+
+Delete the entire layer (with confirmation).
+
+
+
+Delete specific rows from the layer’s attribute table.
+
+
+
+Use update_definition to apply symbology and popup changes, item.delete() for layer deletion, and layer.delete_features() for row deletion.
+
+
+
+Data Preview and Management:
+
+
+
+
+
+In the 'Data Management' expander, show the selected layer’s attribute table with st.dataframe, including checkboxes for row selection.
+
+
+
+Add a 'Delete Selected Rows' button to remove selected features using their object IDs.
+
+
+
+Require confirmation (e.g., a checkbox or second button) to avoid accidental deletions.
+
+
+
+After deletion, re-query the layer to refresh the table display.
+
+
+
+Limit displayed rows (e.g., first 100) for performance.
+
+
+
+Layer Info:
+
+
+
+
+
+Add a 'Layer Info' expander displaying the selected layer’s geometry type, field names, and feature count using layer.properties.
+
+
+
+Create New Layer with Customization:
+
+
+
+
+
+Enhance the 'Create New Layer' section to allow users to set symbology and popup configuration for the new layer during creation.
+
+
+
+After uploading the .zip file containing the shapefile, extract the shapefile to a temporary directory.
+
+
+
+Use the fiona library to read the shapefile's geometry type (point, line, polygon) and field names.
+
+
+
+Present a color picker (st.color_picker) based on the geometry type for the user to choose the symbology color.
+
+
+
+Present the field names in a multiselect widget (st.multiselect) for the user to choose which fields to display in the popup.
+
+
+
+When the user clicks 'Create and Publish Layer', construct a layer_definition dictionary with a simple renderer based on the geometry type and selected color, and popupInfo based on the selected fields.
+
+
+
+Publish the shapefile as a new feature layer using gis.content.add and item.publish, passing the layer_definition to set the initial symbology and popup settings.
+
+
+
+Handle errors, such as invalid shapefiles or missing fields, with st.error messages.
+
+
+
+Note: Ensure fiona is installed in the environment (e.g., via pip install fiona).
+
+
+
+UI and User Guidance:
+
+
+
+
+
+Use st.sidebar for navigation and st.expander for organizing sections.
+
+
+
+Add st.warning for destructive actions (e.g., deletions) and st.success for completed changes.
+
+
+
+Include st.info messages to guide users through new features, such as setting symbology and popups for new layers.
+
+This enhancement will allow users to fully customize both existing and new layers, making the app a powerful and versatile tool for managing ArcGIS Online content.
