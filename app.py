@@ -538,8 +538,10 @@ def create_new_layer():
                         if layer_description:
                             item_properties['description'] = layer_description
                         
-                        # Create temporary zip for upload
-                        temp_zip_path = os.path.join(temp_dir, "new_layer.zip")
+                        # Create temporary zip for upload with unique name
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        unique_zip_name = f"layer_{timestamp}.zip"
+                        temp_zip_path = os.path.join(temp_dir, unique_zip_name)
                         with zipfile.ZipFile(temp_zip_path, 'w') as zip_ref:
                             for root, dirs, files in os.walk(temp_dir):
                                 for file in files:
@@ -715,9 +717,11 @@ def merge_layers():
                             st.warning(f"Could not process layer {layer.title}: {str(e)}")
                     
                     if merged_gdf is not None and len(merged_gdf) > 0:
-                        # Save merged data to temporary shapefile
+                        # Save merged data to temporary shapefile with unique name
                         temp_dir = tempfile.mkdtemp()
-                        shapefile_path = os.path.join(temp_dir, "merged_layer.shp")
+                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                        shapefile_name = f"merged_{timestamp}"
+                        shapefile_path = os.path.join(temp_dir, f"{shapefile_name}.shp")
                         
                         # Convert to GeoDataFrame if needed
                         if not isinstance(merged_gdf, gpd.GeoDataFrame):
@@ -725,8 +729,8 @@ def merge_layers():
                         
                         merged_gdf.to_file(shapefile_path)
                         
-                        # Create zip file
-                        zip_path = os.path.join(temp_dir, "merged_layer.zip")
+                        # Create zip file with unique name
+                        zip_path = os.path.join(temp_dir, f"{shapefile_name}.zip")
                         with zipfile.ZipFile(zip_path, 'w') as zip_ref:
                             for root, dirs, files in os.walk(temp_dir):
                                 for file in files:
