@@ -5,3 +5,31 @@
 [2025-06-23 03:40:30.902326] Error creating layer 'MST Fiber': 'dict' object has no attribute 'to_csv'
 [2025-06-23 03:46:11.862896] Creating layer: Peoples MST Fiber with 931 features
 [2025-06-23 03:46:11.957772] Error creating layer 'Peoples MST Fiber': 'dict' object has no attribute 'to_csv'
+[2025-06-23 04:14:52.953398] Starting shapefile processing
+[2025-06-23 04:14:52.959255] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:14:53.016164] Successfully read shapefile with GeoPandas
+[2025-06-23 04:14:53.021263] Added default ID column due to empty/missing attributes
+[2025-06-23 04:14:53.023570] Shapefile processing completed successfully
+[2025-06-23 04:14:53.025190] Cleaned up temporary files
+[2025-06-23 04:15:28.068168] Starting shapefile processing
+[2025-06-23 04:15:28.074170] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:15:28.085142] Successfully read shapefile with GeoPandas
+[2025-06-23 04:15:28.086341] Added default ID column due to empty/missing attributes
+[2025-06-23 04:15:28.088529] Shapefile processing completed successfully
+[2025-06-23 04:15:28.089379] Cleaned up temporary files
+[2025-06-23 04:16:02.093357] Starting shapefile processing
+[2025-06-23 04:16:02.096477] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:16:02.107004] Successfully read shapefile with GeoPandas
+[2025-06-23 04:16:02.108403] Added default ID column due to empty/missing attributes
+[2025-06-23 04:16:02.110689] Shapefile processing completed successfully
+[2025-06-23 04:16:02.112988] Cleaned up temporary files
+[2025-06-23 04:16:04.048926] Starting shapefile processing
+[2025-06-23 04:16:04.054440] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:16:04.068327] Successfully read shapefile with GeoPandas
+[2025-06-23 04:16:04.070742] Added default ID column due to empty/missing attributes
+[2025-06-23 04:16:04.072627] Shapefile processing completed successfully
+[2025-06-23 04:16:04.073531] Cleaned up temporary files
+[2025-06-23 04:16:04.147501] Creating layer: Peoples MST Fiber with 931 features
+[2025-06-23 04:16:04.149013] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:16:05.050865] Published layer using spatial.to_featurelayer
+[2025-06-23 04:16:05.053565] Error creating layer 'Peoples MST Fiber': cannot access local variable 'layer_collection' where it is not associated with a value

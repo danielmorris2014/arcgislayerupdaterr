@@ -121,9 +121,19 @@ def validate_layer_compatibility(layers):
     try:
         geometry_types = set()
         for layer in layers:
-            layer_collection = FeatureLayerCollection.fromitem(layer)
-            feature_layer = layer_collection.layers[0]
-            geometry_types.add(feature_layer.properties.geometryType)
+            layer_collection = None
+            try:
+                layer_collection = FeatureLayerCollection.fromitem(layer)
+                feature_layer = layer_collection.layers[0]
+                geometry_types.add(feature_layer.properties.geometryType)
+                
+                with open("update_log.txt", "a") as log_file:
+                    log_file.write(f"[{datetime.now()}] Validated layer {layer.title} for merging\n")
+                    
+            except Exception as layer_error:
+                with open("update_log.txt", "a") as log_file:
+                    log_file.write(f"[{datetime.now()}] Error validating layer {layer.title}: {str(layer_error)}\n")
+                return False, f"Error accessing layer {layer.title}: {str(layer_error)}"
         
         if len(geometry_types) > 1:
             return False, f"Layers have different geometry types: {', '.join(geometry_types)}"
@@ -131,6 +141,8 @@ def validate_layer_compatibility(layers):
         return True, "Layers are compatible for merging"
         
     except Exception as e:
+        with open("update_log.txt", "a") as log_file:
+            log_file.write(f"[{datetime.now()}] Error in layer compatibility validation: {str(e)}\n")
         return False, f"Error validating layer compatibility: {str(e)}"
 
 def create_layer_map(df, layer_title):
@@ -1073,10 +1085,17 @@ def create_new_layer():
                                     tags=[tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else ["shapefile", "uploaded"]
                                 )
                         
+                        # Initialize layer_collection with proper scope
+                        layer_collection = None
+                        feature_server_url = "URL not available"
+                        
                         # Apply custom styling and popup configuration
                         try:
                             layer_collection = FeatureLayerCollection.fromitem(feature_service)
                             feature_layer = layer_collection.layers[0]
+                            
+                            with open("update_log.txt", "a") as log_file:
+                                log_file.write(f"[{datetime.now()}] Successfully created layer collection\n")
                             
                             # Create layer definition with styling and popup
                             layer_definition = {}
@@ -1102,15 +1121,26 @@ def create_new_layer():
                         
                         except Exception as e:
                             st.warning(f"Layer created but styling could not be applied: {str(e)}")
+                            with open("update_log.txt", "a") as log_file:
+                                log_file.write(f"[{datetime.now()}] Styling error: {str(e)}\n")
                         
                         # Apply sharing settings
-                        if sharing_level == "org":
-                            feature_service.share(org=True)
-                        elif sharing_level == "public":
-                            feature_service.share(everyone=True)
+                        try:
+                            if sharing_level == "org":
+                                feature_service.share(org=True)
+                            elif sharing_level == "public":
+                                feature_service.share(everyone=True)
+                        except Exception as share_error:
+                            st.warning(f"Could not apply sharing settings: {str(share_error)}")
                         
-                        # Get FeatureServer URL
-                        feature_server_url = layer_collection.url
+                        # Get FeatureServer URL safely
+                        if layer_collection is not None:
+                            try:
+                                feature_server_url = layer_collection.url
+                            except Exception as url_error:
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Could not get URL: {str(url_error)}\n")
+                                feature_server_url = "URL not available"
                         
                         st.success("Layer created successfully with custom styling!")
                         st.info(f"Records created: {len(gdf)}")
@@ -1507,13 +1537,25 @@ def layer_editor():
     selected_layer = layer_options[selected_layer_key]
     
     # Get sublayers from the feature service
+    layer_collection = None
+    sublayers = []
+    
     try:
         layer_collection = FeatureLayerCollection.fromitem(selected_layer)
         sublayers = layer_collection.layers
         
+        with open("update_log.txt", "a") as log_file:
+            log_file.write(f"[{datetime.now()}] Layer editor: Successfully loaded layer collection for {selected_layer.title}\n")
+        
         if not sublayers:
             st.error("No sublayers found in this feature service")
             return
+            
+    except Exception as e:
+        st.error(f"Failed to load feature service layers: {str(e)}")
+        with open("update_log.txt", "a") as log_file:
+            log_file.write(f"[{datetime.now()}] Layer editor error: {str(e)}\n")
+        return
         
         # Sublayer selection
         if len(sublayers) > 1:
