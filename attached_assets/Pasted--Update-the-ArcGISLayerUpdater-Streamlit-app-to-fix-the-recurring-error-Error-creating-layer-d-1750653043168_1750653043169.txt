@@ -1,0 +1,95 @@
+"Update the `ArcGISLayerUpdater` Streamlit app to fix the recurring error `'Error creating layer: 'dict' object has no attribute 'to_csv''` when uploading a shapefile zip (e.g., 'MST_BURIED.zip') to create a new layer in ArcGIS Online. The app uses the ArcGIS API for Python and GeoPandas to process shapefiles, but the error suggests that shapefile data—particularly geometry—is being mishandled, resulting in a dictionary instead of a pandas DataFrame.
+
+**Goal**: Ensure the app correctly processes shapefile data, converts geometry to a CSV-compatible format, and handles errors gracefully without adding a separate app.
+
+**Requirements**:
+- Read shapefiles using GeoPandas and validate the data as a GeoDataFrame.
+- Convert geometry data to Well-Known Text (WKT) format for CSV export.
+- Check that the data is a pandas DataFrame before calling `to_csv`.
+- Provide clear error messages for invalid or empty shapefiles.
+
+**Steps to Implement**:
+
+1. **Shapefile Extraction and Reading**:
+   - Extract the uploaded `.zip` file to a temporary directory (e.g., 'temp_shapefile').
+   - Identify the `.shp` file within the extracted files and read it using `geopandas.read_file()`.
+
+2. **Data Validation**:
+   - Verify that the result is a GeoDataFrame using `isinstance(gdf, gpd.GeoDataFrame)`. If not, raise an error with a message like 'Shapefile did not load correctly'.
+   - Check if the GeoDataFrame is empty (`gdf.empty`). If so, notify the user via `st.error`.
+
+3. **Geometry Conversion**:
+   - Add a new column (e.g., `'wkt_geometry'`) with the geometry converted to WKT using `gdf['geometry'].to_wkt()`.
+   - Drop the original geometry column to create a standard pandas DataFrame.
+
+4. **CSV Export**:
+   - Convert the GeoDataFrame (minus the geometry column) to a pandas DataFrame with `pd.DataFrame(gdf.drop(columns='geometry'))`.
+   - Export it to a CSV file (e.g., 'temp_layer.csv') using `df.to_csv(index=False)`.
+
+5. **Error Handling**:
+   - Use `try-except` blocks to catch exceptions like `ValueError` (invalid shapefile), `TypeError` (wrong data type), or general failures.
+   - Display specific error messages via `st.error` (e.g., 'Shapefile contains no geometry', 'Failed to process attributes').
+
+6. **ArcGIS Integration**:
+   - Use the ArcGIS API (`gis.content.import_data`) to create a layer from the CSV, ensuring it works with the processed DataFrame.
+
+**Sample Code**:
+
+```python
+import streamlit as st
+import geopandas as gpd
+import pandas as pd
+from arcgis.gis import GIS
+import zipfile
+import os
+
+# File uploader
+uploaded_file = st.file_uploader('Upload shapefile zip', type='zip')
+
+if uploaded_file:
+    try:
+        # Extract the zip file
+        with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
+            zip_ref.extractall('temp_shapefile')
+        
+        # Find the .shp file
+        shp_file = next(f for f in os.listdir('temp_shapefile') if f.endswith('.shp'))
+        shp_path = os.path.join('temp_shapefile', shp_file)
+        
+        # Read shapefile into a GeoDataFrame
+        gdf = gpd.read_file(shp_path)
+        
+        # Validate the data
+        if not isinstance(gdf, gpd.GeoDataFrame):
+            raise TypeError('Shapefile did not load as a GeoDataFrame')
+        if gdf.empty:
+            raise ValueError('Shapefile contains no data')
+        
+        # Convert geometry to WKT
+        gdf['wkt_geometry'] = gdf['geometry'].to_wkt()
+        
+        # Convert to a standard DataFrame
+        df = pd.DataFrame(gdf.drop(columns='geometry'))
+        
+        # Export to CSV
+        df.to_csv('temp_layer.csv', index=False)
+        
+        # Connect to ArcGIS and create layer
+        gis = GIS('https://www.arcgis.com', 'your_username', 'your_password')
+        feature_layer = gis.content.import_data(df, title='New Layer')
+        
+        st.success('Layer created successfully!')
+        
+    except TypeError as te:
+        st.error(f'Error: {str(te)}')
+    except ValueError as ve:
+        st.error(f'Error: {str(ve)}')
+    except Exception as e:
+        st.error(f'Unexpected error: {str(e)}')
+    
+    finally:
+        # Clean up temporary files
+        if os.path.exists('temp_shapefile'):
+            for f in os.listdir('temp_shapefile'):
+                os.remove(os.path.join('temp_shapefile', f))
+            os.rmdir('temp_shapefile')

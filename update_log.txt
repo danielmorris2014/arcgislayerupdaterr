@@ -112,3 +112,33 @@
 [2025-06-23 04:25:05.113277] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
 [2025-06-23 04:25:06.024216] Spatial method failed: Layer creation returned invalid result, using fallback
 [2025-06-23 04:25:06.118762] Error creating layer 'Peoples MST Fiber': 'dict' object has no attribute 'to_csv'
+[2025-06-23 04:29:54.042801] Starting shapefile processing
+[2025-06-23 04:29:54.047245] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:29:54.089353] Successfully read shapefile with GeoPandas
+[2025-06-23 04:29:54.091619] Added default ID column due to empty/missing attributes
+[2025-06-23 04:29:54.093870] Shapefile processing completed successfully
+[2025-06-23 04:29:54.095358] Cleaned up temporary files
+[2025-06-23 04:30:00.159526] Starting shapefile processing
+[2025-06-23 04:30:00.166227] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:30:00.180408] Successfully read shapefile with GeoPandas
+[2025-06-23 04:30:00.182336] Added default ID column due to empty/missing attributes
+[2025-06-23 04:30:00.184118] Shapefile processing completed successfully
+[2025-06-23 04:30:00.185651] Cleaned up temporary files
+[2025-06-23 04:30:04.502437] Starting shapefile processing
+[2025-06-23 04:30:04.510549] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:30:04.526501] Successfully read shapefile with GeoPandas
+[2025-06-23 04:30:04.528837] Added default ID column due to empty/missing attributes
+[2025-06-23 04:30:04.531648] Shapefile processing completed successfully
+[2025-06-23 04:30:04.533463] Cleaned up temporary files
+[2025-06-23 04:30:06.471870] Starting shapefile processing
+[2025-06-23 04:30:06.478569] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:30:06.489291] Successfully read shapefile with GeoPandas
+[2025-06-23 04:30:06.491563] Added default ID column due to empty/missing attributes
+[2025-06-23 04:30:06.493551] Shapefile processing completed successfully
+[2025-06-23 04:30:06.495388] Cleaned up temporary files
+[2025-06-23 04:30:06.563139] Creating layer: Peoples MST Fiber with 931 features
+[2025-06-23 04:30:06.563983] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:30:06.565609] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:30:07.456781] Spatial method failed: Layer creation returned invalid result, using enhanced fallback
+[2025-06-23 04:30:07.457100] Safe method failed: name 'create_layer_with_safe_handling' is not defined, using minimal fallback
+[2025-06-23 04:30:07.572477] Error creating layer 'Peoples MST Fiber': 'dict' object has no attribute 'to_csv'

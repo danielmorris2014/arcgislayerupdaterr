@@ -1029,8 +1029,40 @@ def create_new_layer():
                                     log_file.write(f"[{datetime.now()}] Authentication check failed: {str(auth_check)}\n")
                                 raise Exception("Authentication expired or invalid")
                             
-                            # Use ArcGIS spatial accessor to publish directly
+                            # Convert geometry to WKT format to enable CSV export compatibility
                             try:
+                                # Validate GeoDataFrame
+                                if not isinstance(gdf, gpd.GeoDataFrame):
+                                    raise TypeError("Data is not a valid GeoDataFrame")
+                                
+                                if gdf.empty:
+                                    raise ValueError("GeoDataFrame contains no data")
+                                
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Converting geometry to WKT format for CSV compatibility\n")
+                                
+                                # Create a copy of the GeoDataFrame for processing
+                                df_for_csv = gdf.copy()
+                                
+                                # Convert geometry to WKT format
+                                if 'geometry' in df_for_csv.columns:
+                                    df_for_csv['wkt_geometry'] = df_for_csv['geometry'].to_wkt()
+                                    df_for_csv = df_for_csv.drop(columns=['geometry'])
+                                
+                                # Convert to standard pandas DataFrame
+                                df_clean = pd.DataFrame(df_for_csv)
+                                
+                                # Validate DataFrame before CSV operations
+                                if not isinstance(df_clean, pd.DataFrame):
+                                    raise TypeError("Failed to convert to pandas DataFrame")
+                                
+                                # Test CSV export capability
+                                csv_test = df_clean.to_csv(index=False)
+                                
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Successfully converted to CSV-compatible format\n")
+                                
+                                # Use spatial accessor for direct publishing
                                 feature_service = gdf.spatial.to_featurelayer(
                                     title=unique_title,
                                     gis=st.session_state.gis,
@@ -1053,17 +1085,41 @@ def create_new_layer():
                                     log_file.write(f"[{datetime.now()}] Spatial method failed: {str(spatial_error)}, using enhanced fallback\n")
                                 
                                 try:
-                                    # Use safe layer creation function to avoid CSV errors
-                                    result = create_layer_with_safe_handling(gdf, unique_title)
+                                    # Use CSV-compatible approach when spatial method fails
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] Attempting CSV-compatible layer creation\n")
                                     
-                                    if result.get('success'):
-                                        feature_service = result.get('layer_item')
-                                        with open("update_log.txt", "a") as log_file:
-                                            log_file.write(f"[{datetime.now()}] Successfully created layer using safe handling method\n")
-                                    else:
-                                        raise Exception(f"Safe layer creation failed: {result.get('error', 'Unknown error')}")
+                                    # Convert GeoDataFrame to CSV-compatible format
+                                    df_for_csv = gdf.copy()
+                                    
+                                    # Convert geometry to WKT
+                                    if 'geometry' in df_for_csv.columns:
+                                        df_for_csv['wkt_geometry'] = df_for_csv['geometry'].to_wkt()
+                                        df_for_csv = df_for_csv.drop(columns=['geometry'])
+                                    
+                                    # Convert to pandas DataFrame
+                                    df_clean = pd.DataFrame(df_for_csv)
+                                    
+                                    # Create temporary CSV file
+                                    import tempfile
+                                    with tempfile.NamedTemporaryFile(mode='w', suffix='.csv', delete=False) as tmp_file:
+                                        df_clean.to_csv(tmp_file.name, index=False)
                                         
-                                except Exception as safe_error:
+                                        # Import using CSV file
+                                        feature_service = st.session_state.gis.content.import_data(
+                                            tmp_file.name,
+                                            title=unique_title,
+                                            tags=[tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else ["shapefile", "uploaded"]
+                                        )
+                                        
+                                        # Clean up temporary file
+                                        import os
+                                        os.unlink(tmp_file.name)
+                                    
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] Successfully created layer using CSV method\n")
+                                        
+                                except Exception as csv_error:
                                     # Final fallback - create minimal feature collection without problematic data
                                     with open("update_log.txt", "a") as log_file:
                                         log_file.write(f"[{datetime.now()}] Safe method failed: {str(safe_error)}, using minimal fallback\n")
