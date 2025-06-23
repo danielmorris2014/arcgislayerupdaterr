@@ -1080,35 +1080,77 @@ def layer_editor():
         st.info("No feature layers found in your account")
         return
     
-    # Layer selection
+    # Feature Service selection
     layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
     selected_layer_key = st.selectbox(
-        "Select layer to edit",
+        "Select Feature Service",
         options=[""] + list(layer_options.keys()),
-        help="Choose the layer you want to style and manage"
+        help="Choose the feature service you want to edit"
     )
     
     if not selected_layer_key:
+        st.info("Please select a feature service to begin editing")
         return
     
     selected_layer = layer_options[selected_layer_key]
     
-    # Get layer properties
+    # Get sublayers from the feature service
     try:
         layer_collection = FeatureLayerCollection.fromitem(selected_layer)
-        feature_layer = layer_collection.layers[0]
+        sublayers = layer_collection.layers
+        
+        if not sublayers:
+            st.error("No sublayers found in this feature service")
+            return
+        
+        # Sublayer selection
+        if len(sublayers) > 1:
+            sublayer_options = {}
+            for i, sublayer in enumerate(sublayers):
+                try:
+                    name = sublayer.properties.name if hasattr(sublayer.properties, 'name') and sublayer.properties.name else f"Layer {i}"
+                except:
+                    name = f"Layer {i}"
+                sublayer_options[f"{name} (ID: {i})"] = sublayer
+            
+            selected_sublayer_key = st.selectbox(
+                "Select Sublayer",
+                options=[""] + list(sublayer_options.keys()),
+                help="Choose the specific sublayer to edit"
+            )
+            
+            if not selected_sublayer_key:
+                st.info("Please select a sublayer to edit")
+                return
+            
+            feature_layer = sublayer_options[selected_sublayer_key]
+            st.success(f"Selected sublayer: {selected_sublayer_key}")
+        else:
+            feature_layer = sublayers[0]
+            st.info("Feature service has only one sublayer")
+        
         layer_props = feature_layer.properties
         
-        # Layer Info Expander
-        with st.expander("ℹ️ Layer Information", expanded=True):
+        # Sublayer Info Expander
+        with st.expander("ℹ️ Sublayer Information", expanded=True):
             col1, col2 = st.columns(2)
             with col1:
                 st.write(f"**Geometry Type:** {layer_props.geometryType}")
-                st.write(f"**Feature Count:** {feature_layer.query(return_count_only=True)}")
+                try:
+                    feature_count = feature_layer.query(return_count_only=True)
+                    st.write(f"**Feature Count:** {feature_count}")
+                except:
+                    st.write("**Feature Count:** Unable to retrieve")
             with col2:
                 st.write(f"**Fields:** {len(layer_props.fields)}")
                 field_names = [field['name'] for field in layer_props.fields if field['name'] not in ['OBJECTID', 'GlobalID']]
                 st.write(f"**Available Fields:** {', '.join(field_names[:5])}{'...' if len(field_names) > 5 else ''}")
+                
+                # Show sublayer-specific information
+                if hasattr(layer_props, 'name') and layer_props.name:
+                    st.write(f"**Sublayer Name:** {layer_props.name}")
+                if hasattr(layer_props, 'id'):
+                    st.write(f"**Sublayer ID:** {layer_props.id}")
         
         # Symbology Expander
         with st.expander("🎨 Symbology"):

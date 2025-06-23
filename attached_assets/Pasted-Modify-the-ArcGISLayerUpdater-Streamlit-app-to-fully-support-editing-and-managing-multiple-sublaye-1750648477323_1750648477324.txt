@@ -1,0 +1,21 @@
+Modify the 'ArcGISLayerUpdater' Streamlit app to fully support editing and managing multiple sublayers within a selected ArcGIS Online feature service. The app should retain all existing functionality (e.g., authentication, layer viewing, updating, creating, merging, deleting, and displaying FeatureServer URLs) while adding the ability to select and edit individual sublayers. Implement the following changes:
+
+Add Sublayer Selection in the Layer Editor:
+In the 'Layer Editor' section, after the user selects a feature service from the existing dropdown (e.g., 'ALL Prints NORTH UPDATE THIS (fc94abfb5db64c383824fc5e58de9b804)'), introduce a new dropdown or selection widget to list all sublayers within that feature service.
+Use the ArcGIS API for Python to fetch the FeatureLayerCollection object for the selected feature service, then access its layers property to retrieve a list of FeatureLayer objects (the sublayers).
+Populate the sublayer dropdown with the names or IDs of these sublayers, allowing the user to select one to edit.
+Update Layer Information Display:
+Once a sublayer is selected, update the 'Layer Info' display (e.g., geometry type, feature count, fields) to reflect the properties of the chosen sublayer, not just the feature service as a whole.
+Example: If the selected sublayer has a geometry type of 'esriGeometryPoint' and 10,786 features, display those specifics.
+Apply Editing Options to the Selected Sublayer:
+Ensure that all editing options in the 'Layer Editor' section (e.g., symbology, popup configuration, data management) apply to the selected sublayer.
+For symbology, use the update_definition method on the specific FeatureLayer object to set properties like display color based on the user’s input (e.g., from the 'CHOOSE LAYER COLOR' picker).
+For data management, display the attribute table of the selected sublayer using st.dataframe and allow operations like row deletion or editing via the sublayer’s delete_features or edit_features methods.
+User Interface Enhancements:
+Place the sublayer selection dropdown immediately below the feature service dropdown in the 'Layer Editor' section for a clear workflow.
+Add labels like 'Select Feature Service' and 'Select Sublayer' to guide the user.
+Use st.info to display a message like 'Please select a sublayer to edit' if no sublayer is chosen yet.
+Error Handling:
+If the feature service has no sublayers or if retrieval fails, show an st.error message such as 'No sublayers found in this feature service'.
+Disable editing options until a sublayer is selected to prevent unintended actions on the entire feature service.
+Here’s a sample code snippet to guide the implementation:
