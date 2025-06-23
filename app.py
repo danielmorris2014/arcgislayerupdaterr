@@ -489,32 +489,67 @@ def get_shapefile_info_geopandas(zip_file):
         with open(zip_path, "wb") as f:
             f.write(zip_file.getvalue())
         
-        # Extract zip file
+        # Extract zip file and list contents
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            file_list = zip_ref.namelist()
             zip_ref.extractall(temp_dir)
         
-        # Find shapefile
-        shp_files = [f for f in os.listdir(temp_dir) if f.endswith('.shp')]
+        # Debug: List all extracted files
+        extracted_files = []
+        for root, dirs, files in os.walk(temp_dir):
+            for file in files:
+                extracted_files.append(os.path.join(root, file))
+        
+        # Find shapefile with more flexible search
+        shp_files = []
+        for file_path in extracted_files:
+            if file_path.lower().endswith('.shp'):
+                shp_files.append(file_path)
+        
         if not shp_files:
-            return None, None, "No .shp file found in the uploaded zip"
+            return None, None, f"No .shp file found. Files in zip: {file_list}"
         
-        shp_path = os.path.join(temp_dir, shp_files[0])
+        shp_path = shp_files[0]
         
-        # Read shapefile with geopandas
-        gdf = gpd.read_file(shp_path)
+        # Check for required components
+        base_name = os.path.splitext(shp_path)[0]
+        required_extensions = ['.shx', '.dbf']
+        missing_files = []
+        
+        for ext in required_extensions:
+            if not os.path.exists(base_name + ext):
+                # Try case variations
+                if not os.path.exists(base_name + ext.upper()):
+                    missing_files.append(ext)
+        
+        if missing_files:
+            return None, None, f"Missing required files: {missing_files}. Shapefile needs .shp, .shx, and .dbf files."
+        
+        # Try to read shapefile with geopandas
+        try:
+            gdf = gpd.read_file(shp_path)
+        except Exception as read_error:
+            return None, None, f"Could not read shapefile: {str(read_error)}"
         
         if len(gdf) == 0:
-            return None, None, "Shapefile is empty"
+            return None, None, "Shapefile contains no features"
         
-        # Get geometry type from first feature
-        if gdf.geometry.iloc[0] is not None:
-            geom_type = gdf.geometry.iloc[0].geom_type
+        # Get geometry type from the GeoDataFrame
+        if hasattr(gdf, 'geometry') and len(gdf) > 0:
+            # Try multiple ways to get geometry type
+            first_geom = gdf.geometry.iloc[0]
+            if first_geom is not None:
+                geom_type = first_geom.geom_type
+            else:
+                # Try getting from geometry column type
+                geom_type = str(gdf.geometry.dtype).split('.')[-1] if hasattr(gdf.geometry, 'dtype') else 'Unknown'
+            
             # Map geopandas geometry types to standard names
-            if geom_type in ['Point', 'MultiPoint']:
+            if geom_type.lower() in ['point', 'multipoint']:
                 geometry_type = 'Point'
-            elif geom_type in ['LineString', 'MultiLineString']:
+            elif geom_type.lower() in ['linestring', 'multilinestring']:
                 geometry_type = 'LineString'
-            elif geom_type in ['Polygon', 'MultiPolygon']:
+            elif geom_type.lower() in ['polygon', 'multipolygon']:
                 geometry_type = 'Polygon'
             else:
                 geometry_type = geom_type
@@ -532,7 +567,7 @@ def get_shapefile_info_geopandas(zip_file):
     except Exception as e:
         if temp_dir and os.path.exists(temp_dir):
             shutil.rmtree(temp_dir, ignore_errors=True)
-        return None, None, f"Error reading shapefile: {str(e)}"
+        return None, None, f"Error processing shapefile: {str(e)}"
 
 def create_new_layer():
     """Create a new feature layer with enhanced UI and customization"""
