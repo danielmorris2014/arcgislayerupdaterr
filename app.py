@@ -11,6 +11,7 @@ from datetime import datetime
 import json
 import folium
 from streamlit_folium import st_folium
+import fiona
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -475,8 +476,42 @@ def update_existing_layer():
                 else:
                     st.error(message)
 
+def get_shapefile_info_fiona(zip_file):
+    """Get shapefile geometry type and field names using fiona"""
+    try:
+        # Save uploaded file to temporary location
+        temp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, "uploaded.zip")
+        
+        with open(zip_path, "wb") as f:
+            f.write(zip_file.getvalue())
+        
+        # Extract zip file
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        # Find shapefile
+        shp_files = [f for f in os.listdir(temp_dir) if f.endswith('.shp')]
+        if not shp_files:
+            return None, None, None
+        
+        shp_path = os.path.join(temp_dir, shp_files[0])
+        
+        # Read with fiona
+        with fiona.open(shp_path) as src:
+            geometry_type = src.schema['geometry']
+            field_names = list(src.schema['properties'].keys())
+            
+        shutil.rmtree(temp_dir)
+        return geometry_type, field_names, None
+        
+    except Exception as e:
+        if 'temp_dir' in locals():
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        return None, None, str(e)
+
 def create_new_layer():
-    """Create a new feature layer with enhanced UI"""
+    """Create a new feature layer with enhanced UI and customization"""
     st.header("➕ Create New Layer")
     
     # Layer details section
@@ -490,6 +525,75 @@ def create_new_layer():
         with col2:
             layer_tags = st.text_input("Tags (comma-separated)", placeholder="tag1, tag2, tag3")
             sharing_level = st.selectbox("Sharing Level", ["private", "org", "public"])
+    
+    # File upload section
+    with st.expander("📁 Upload Shapefile", expanded=True):
+        st.info("Upload a zip file containing your shapefile data")
+        
+        uploaded_file = st.file_uploader(
+            "Upload shapefile (.zip)",
+            type=['zip'],
+            help="Upload a zip file containing .shp, .shx, .dbf, and optional .prj files"
+        )
+        
+        # Initialize variables for styling
+        geometry_type = None
+        field_names = []
+        selected_color = "#FF5733"
+        selected_fields = []
+        
+        if uploaded_file:
+            # Validate and analyze the shapefile
+            is_valid, message = validate_zip_file(uploaded_file)
+            
+            if is_valid:
+                st.success(message)
+                
+                # Get shapefile information using fiona
+                geometry_type, field_names, error = get_shapefile_info_fiona(uploaded_file)
+                
+                if error:
+                    st.error(f"Error reading shapefile: {error}")
+                elif geometry_type and field_names:
+                    st.info(f"Detected geometry type: **{geometry_type}**")
+                    st.info(f"Available fields: **{', '.join(field_names)}**")
+                    
+                    # Styling configuration
+                    with st.expander("🎨 Layer Styling", expanded=True):
+                        st.write(f"**Configure styling for {geometry_type} layer**")
+                        
+                        if geometry_type.lower() in ['point', 'multipoint']:
+                            st.write("Setting up point symbol styling")
+                        elif geometry_type.lower() in ['linestring', 'multilinestring']:
+                            st.write("Setting up line symbol styling")
+                        elif geometry_type.lower() in ['polygon', 'multipolygon']:
+                            st.write("Setting up polygon symbol styling")
+                        
+                        selected_color = st.color_picker("Choose layer color", "#FF5733")
+                        
+                        # Show color preview
+                        st.markdown(f"""
+                        <div style="background-color: {selected_color}; width: 100%; height: 30px; border-radius: 5px; border: 1px solid #ccc;">
+                        </div>
+                        """, unsafe_allow_html=True)
+                    
+                    # Popup configuration
+                    with st.expander("💬 Popup Configuration", expanded=True):
+                        enable_popups = st.checkbox("Enable popups for this layer", value=True)
+                        
+                        if enable_popups and field_names:
+                            selected_fields = st.multiselect(
+                                "Select fields to display in popup",
+                                options=field_names,
+                                default=field_names[:3] if len(field_names) >= 3 else field_names,
+                                help="Choose which fields will be shown when users click on features"
+                            )
+                        elif enable_popups:
+                            st.warning("No fields available for popup configuration")
+                else:
+                    st.error("Could not read shapefile geometry or fields")
+            else:
+                st.error(message)
     
     # Web map selection
     with st.expander("🗺️ Add to Web Maps (Optional)"):
@@ -508,23 +612,33 @@ def create_new_layer():
         else:
             st.info("No web maps found in your account")
     
-    # File upload
-    uploaded_file = st.file_uploader(
-        "Upload shapefile (.zip)",
-        type=['zip'],
-        help="Upload a zip file containing .shp, .shx, .dbf, and optional .prj files"
-    )
-    
-    if uploaded_file and layer_title:
-        # Validate zip file
-        is_valid, message = validate_zip_file(uploaded_file)
-        
-        if is_valid:
-            st.success(message)
+    # Create and Publish Layer Button
+    if uploaded_file and layer_title and geometry_type:
+        with st.expander("🚀 Create and Publish Layer", expanded=True):
+            st.info("Review your settings and create the layer with custom styling")
             
-            if st.button("Create Layer", type="primary"):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write("**Layer Settings:**")
+                st.write(f"• Title: {layer_title}")
+                st.write(f"• Geometry: {geometry_type}")
+                st.write(f"• Sharing: {sharing_level}")
+            
+            with col2:
+                st.write("**Styling:**")
+                st.markdown(f"""
+                <div style="background-color: {selected_color}; width: 50px; height: 20px; border-radius: 3px; border: 1px solid #ccc; display: inline-block;"></div>
+                <span style="margin-left: 10px;">Color: {selected_color}</span>
+                """, unsafe_allow_html=True)
+                
+                if selected_fields:
+                    st.write(f"• Popup fields: {', '.join(selected_fields)}")
+                else:
+                    st.write("• Popups: Disabled")
+            
+            if st.button("🚀 Create and Publish Layer", type="primary"):
                 try:
-                    with st.spinner("Creating new layer..."):
+                    with st.spinner("Creating new layer with custom styling..."):
                         # Extract and load shapefile
                         gdf, temp_dir = extract_and_load_shapefile(uploaded_file)
                         
@@ -539,7 +653,6 @@ def create_new_layer():
                             item_properties['description'] = layer_description
                         
                         # Create temporary zip for upload using layer title
-                        # Clean the title for safe filename use
                         safe_title = "".join(c for c in layer_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
                         safe_title = safe_title.replace(' ', '_')
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -558,6 +671,36 @@ def create_new_layer():
                         # Publish as feature service
                         feature_service = item.publish()
                         
+                        # Apply custom styling and popup configuration
+                        try:
+                            layer_collection = FeatureLayerCollection.fromitem(feature_service)
+                            feature_layer = layer_collection.layers[0]
+                            
+                            # Create layer definition with styling and popup
+                            layer_definition = {}
+                            
+                            # Add custom renderer
+                            if geometry_type and selected_color:
+                                renderer = create_renderer(geometry_type, selected_color)
+                                if renderer:
+                                    layer_definition["drawingInfo"] = {"renderer": renderer}
+                            
+                            # Add popup configuration
+                            if selected_fields:
+                                popup_info = create_popup_info(selected_fields)
+                                if popup_info:
+                                    layer_definition["popupInfo"] = popup_info
+                            elif not enable_popups:
+                                layer_definition["popupInfo"] = None
+                            
+                            # Apply the layer definition
+                            if layer_definition:
+                                feature_layer.manager.update_definition(layer_definition)
+                                st.success("Custom styling and popup configuration applied!")
+                        
+                        except Exception as e:
+                            st.warning(f"Layer created but styling could not be applied: {str(e)}")
+                        
                         # Apply sharing settings
                         if sharing_level == "org":
                             feature_service.share(org=True)
@@ -565,10 +708,9 @@ def create_new_layer():
                             feature_service.share(everyone=True)
                         
                         # Get FeatureServer URL
-                        layer_collection = FeatureLayerCollection.fromitem(feature_service)
                         feature_server_url = layer_collection.url
                         
-                        st.success("Layer created successfully!")
+                        st.success("Layer created successfully with custom styling!")
                         st.info(f"Records created: {len(gdf)}")
                         st.code(f"FeatureServer URL: {feature_server_url}")
                         
@@ -612,8 +754,6 @@ def create_new_layer():
                         
                 except Exception as e:
                     st.error(f"Error creating layer: {str(e)}")
-        else:
-            st.error(message)
     elif uploaded_file and not layer_title:
         st.warning("Please enter a layer title")
 
@@ -862,26 +1002,280 @@ def delete_layer():
             else:
                 st.info("Check the confirmation box to proceed with deletion")
 
+def create_renderer(geometry_type, color):
+    """Create a simple renderer based on geometry type and color"""
+    if geometry_type.lower() in ['point', 'multipoint']:
+        return {
+            "type": "simple",
+            "symbol": {
+                "type": "esriSMS",
+                "style": "esriSMSCircle",
+                "color": [int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), 255],
+                "size": 8,
+                "outline": {
+                    "color": [0, 0, 0, 255],
+                    "width": 1
+                }
+            }
+        }
+    elif geometry_type.lower() in ['polyline', 'line']:
+        return {
+            "type": "simple",
+            "symbol": {
+                "type": "esriSLS",
+                "style": "esriSLSSolid",
+                "color": [int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), 255],
+                "width": 2
+            }
+        }
+    elif geometry_type.lower() in ['polygon', 'multipolygon']:
+        return {
+            "type": "simple",
+            "symbol": {
+                "type": "esriSFS",
+                "style": "esriSFSSolid",
+                "color": [int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), 128],
+                "outline": {
+                    "type": "esriSLS",
+                    "style": "esriSLSSolid",
+                    "color": [int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), 255],
+                    "width": 1
+                }
+            }
+        }
+    else:
+        return None
+
+def create_popup_info(field_names):
+    """Create popup info configuration from selected fields"""
+    if not field_names:
+        return None
+    
+    field_infos = []
+    for field in field_names:
+        field_infos.append({
+            "fieldName": field,
+            "label": field,
+            "isEditable": False,
+            "tooltip": "",
+            "visible": True,
+            "format": None,
+            "stringFieldOption": "textbox"
+        })
+    
+    return {
+        "title": "",
+        "fieldInfos": field_infos,
+        "description": None,
+        "showAttachments": False,
+        "mediaInfos": []
+    }
+
+def layer_editor():
+    """Layer Editor section with styling, popup control, and data management"""
+    st.header("🎨 Layer Editor")
+    
+    feature_layers = get_feature_layers(st.session_state.username)
+    
+    if not feature_layers:
+        st.info("No feature layers found in your account")
+        return
+    
+    # Layer selection
+    layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+    selected_layer_key = st.selectbox(
+        "Select layer to edit",
+        options=[""] + list(layer_options.keys()),
+        help="Choose the layer you want to style and manage"
+    )
+    
+    if not selected_layer_key:
+        return
+    
+    selected_layer = layer_options[selected_layer_key]
+    
+    # Get layer properties
+    try:
+        layer_collection = FeatureLayerCollection.fromitem(selected_layer)
+        feature_layer = layer_collection.layers[0]
+        layer_props = feature_layer.properties
+        
+        # Layer Info Expander
+        with st.expander("ℹ️ Layer Information", expanded=True):
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**Geometry Type:** {layer_props.geometryType}")
+                st.write(f"**Feature Count:** {feature_layer.query(return_count_only=True)}")
+            with col2:
+                st.write(f"**Fields:** {len(layer_props.fields)}")
+                field_names = [field['name'] for field in layer_props.fields if field['name'] not in ['OBJECTID', 'GlobalID']]
+                st.write(f"**Available Fields:** {', '.join(field_names[:5])}{'...' if len(field_names) > 5 else ''}")
+        
+        # Symbology Expander
+        with st.expander("🎨 Symbology"):
+            st.info("Set the display color for this layer")
+            
+            # Color picker based on geometry type
+            if layer_props.geometryType.lower() in ['point', 'multipoint']:
+                st.write("**Point Layer Styling**")
+            elif layer_props.geometryType.lower() in ['polyline']:
+                st.write("**Line Layer Styling**")
+            elif layer_props.geometryType.lower() in ['polygon']:
+                st.write("**Polygon Layer Styling**")
+            
+            selected_color = st.color_picker("Choose layer color", "#FF5733")
+            
+            if st.button("Apply Symbology", type="primary"):
+                try:
+                    renderer = create_renderer(layer_props.geometryType, selected_color)
+                    if renderer:
+                        definition = {"drawingInfo": {"renderer": renderer}}
+                        feature_layer.manager.update_definition(definition)
+                        st.success("Symbology updated successfully!")
+                    else:
+                        st.error("Could not create renderer for this geometry type")
+                except Exception as e:
+                    st.error(f"Error updating symbology: {str(e)}")
+        
+        # Popup Configuration Expander
+        with st.expander("💬 Popup Configuration"):
+            enable_popups = st.checkbox("Enable popups for this layer", value=True)
+            
+            if enable_popups:
+                available_fields = [field['name'] for field in layer_props.fields 
+                                  if field['name'] not in ['OBJECTID', 'GlobalID', 'SHAPE', 'Shape']]
+                
+                selected_fields = st.multiselect(
+                    "Select fields to display in popup",
+                    options=available_fields,
+                    default=available_fields[:3] if len(available_fields) >= 3 else available_fields,
+                    help="Choose which fields will be shown when users click on features"
+                )
+                
+                if st.button("Apply Popup Settings", type="primary"):
+                    try:
+                        popup_info = create_popup_info(selected_fields) if selected_fields else None
+                        definition = {"popupInfo": popup_info}
+                        feature_layer.manager.update_definition(definition)
+                        st.success("Popup configuration updated successfully!")
+                    except Exception as e:
+                        st.error(f"Error updating popup settings: {str(e)}")
+            else:
+                if st.button("Disable Popups", type="primary"):
+                    try:
+                        definition = {"popupInfo": None}
+                        feature_layer.manager.update_definition(definition)
+                        st.success("Popups disabled successfully!")
+                    except Exception as e:
+                        st.error(f"Error disabling popups: {str(e)}")
+        
+        # Data Management Expander
+        with st.expander("📊 Data Management"):
+            st.warning("Data management operations cannot be undone. Use with caution.")
+            
+            # Show attribute table
+            st.subheader("Attribute Table")
+            try:
+                # Query limited features for performance
+                feature_set = feature_layer.query(return_count_only=False, result_record_count=100)
+                if feature_set.features:
+                    df = feature_set.sdf
+                    
+                    # Remove geometry column for display
+                    display_df = df.drop(columns=['SHAPE'] if 'SHAPE' in df.columns else [])
+                    
+                    # Add selection checkboxes
+                    if 'OBJECTID' in display_df.columns:
+                        st.write(f"Showing first 100 records (Total: {feature_layer.query(return_count_only=True)})")
+                        
+                        # Row selection
+                        selected_rows = st.multiselect(
+                            "Select rows to delete",
+                            options=display_df['OBJECTID'].tolist(),
+                            format_func=lambda x: f"OBJECTID: {x}",
+                            help="Select the Object IDs of features you want to delete"
+                        )
+                        
+                        # Display the data table
+                        st.dataframe(display_df, use_container_width=True)
+                        
+                        # Delete selected rows
+                        if selected_rows:
+                            st.warning(f"You have selected {len(selected_rows)} rows for deletion")
+                            
+                            confirm_delete = st.checkbox("I understand this will permanently delete the selected features")
+                            
+                            if confirm_delete and st.button("🗑️ Delete Selected Rows", type="primary"):
+                                try:
+                                    # Delete features by OBJECTID
+                                    where_clause = f"OBJECTID IN ({','.join(map(str, selected_rows))})"
+                                    delete_result = feature_layer.delete_features(where=where_clause)
+                                    
+                                    if delete_result.get('deleteResults'):
+                                        successful_deletes = sum(1 for result in delete_result['deleteResults'] if result.get('success'))
+                                        st.success(f"Successfully deleted {successful_deletes} features")
+                                        st.rerun()
+                                    else:
+                                        st.error("No features were deleted")
+                                except Exception as e:
+                                    st.error(f"Error deleting features: {str(e)}")
+                    else:
+                        st.dataframe(display_df, use_container_width=True)
+                else:
+                    st.info("No features found in this layer")
+            except Exception as e:
+                st.error(f"Error loading attribute table: {str(e)}")
+            
+            # Delete entire layer
+            st.subheader("Layer Management")
+            st.error("Danger Zone: Complete layer deletion")
+            
+            confirm_layer_delete = st.checkbox("I want to delete this entire layer and all its data")
+            
+            if confirm_layer_delete:
+                confirm_text = st.text_input(
+                    f"Type '{selected_layer.title}' to confirm layer deletion",
+                    placeholder=selected_layer.title
+                )
+                
+                if confirm_text == selected_layer.title:
+                    if st.button("🗑️ DELETE ENTIRE LAYER", type="primary"):
+                        try:
+                            result = selected_layer.delete()
+                            if result:
+                                st.success(f"Layer '{selected_layer.title}' has been deleted successfully")
+                                st.rerun()
+                            else:
+                                st.error("Failed to delete the layer")
+                        except Exception as e:
+                            st.error(f"Error deleting layer: {str(e)}")
+                else:
+                    st.info("Enter the exact layer title above to enable deletion")
+    
+    except Exception as e:
+        st.error(f"Error accessing layer properties: {str(e)}")
+
 def show_help():
     """Display help and guidance for using the application"""
     with st.sidebar.expander("❓ Help & Guide"):
         st.write("**Quick Start Guide:**")
         st.write("1. **View Layers** - Browse your existing feature layers and preview their data")
         st.write("2. **Update Layer** - Replace data in existing layers with new shapefiles")
-        st.write("3. **Create Layer** - Upload shapefiles to create new feature layers")
-        st.write("4. **Merge Layers** - Combine multiple layers into one new layer")
-        st.write("5. **Delete Layer** - Permanently remove layers from your account")
+        st.write("3. **Create Layer** - Upload shapefiles to create new feature layers with custom styling")
+        st.write("4. **Layer Editor** - Style layers, configure popups, and manage data")
+        st.write("5. **Merge Layers** - Combine multiple layers into one new layer")
+        st.write("6. **Delete Layer** - Permanently remove layers from your account")
         
         st.write("**Tips:**")
         st.write("• Use the preview feature to examine data before operations")
-        st.write("• Ensure layers have compatible geometry types before merging")
-        st.write("• FeatureServer URLs are displayed for external integrations")
+        st.write("• Set custom colors and popup fields when creating new layers")
+        st.write("• Use Layer Editor to modify styling and manage existing data")
         st.write("• All operations include confirmation steps for safety")
         
         st.write("**File Requirements:**")
         st.write("• Upload zip files containing .shp, .shx, and .dbf files")
         st.write("• Include .prj files for proper coordinate system handling")
-        st.write("• Maximum 10 features shown in previews for performance")
+        st.write("• Maximum 100 features shown in data management for performance")
 
 def main():
     """Enhanced main application with improved navigation and help"""
@@ -916,7 +1310,7 @@ def main():
     # Page selection with enhanced descriptions
     page = st.sidebar.selectbox(
         "Select Action",
-        ["View Layers", "Update Layer", "Create Layer", "Merge Layers", "Delete Layer"],
+        ["View Layers", "Update Layer", "Create Layer", "Layer Editor", "Merge Layers", "Delete Layer"],
         help="Choose the operation you want to perform"
     )
     
