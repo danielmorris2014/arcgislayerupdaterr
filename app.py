@@ -1029,43 +1029,51 @@ def create_new_layer():
                                     log_file.write(f"[{datetime.now()}] Authentication check failed: {str(auth_check)}\n")
                                 raise Exception("Authentication expired or invalid")
                             
-                            # Convert geometry to WKT format to enable CSV export compatibility
+                            # Step 1: Validate GeoDataFrame structure
+                            if not isinstance(gdf, gpd.GeoDataFrame):
+                                raise TypeError(f"Expected GeoDataFrame, got {type(gdf).__name__}")
+                            
+                            if gdf.empty:
+                                raise ValueError("Shapefile contains no data")
+                                
+                            with open("update_log.txt", "a") as log_file:
+                                log_file.write(f"[{datetime.now()}] Validated GeoDataFrame with {len(gdf)} features\n")
+                            
+                            # Step 2: Convert geometry to WKT and create DataFrame
                             try:
-                                # Validate GeoDataFrame
-                                if not isinstance(gdf, gpd.GeoDataFrame):
-                                    raise TypeError("Data is not a valid GeoDataFrame")
+                                # Create working copy
+                                df_working = gdf.copy()
                                 
-                                if gdf.empty:
-                                    raise ValueError("GeoDataFrame contains no data")
-                                
-                                with open("update_log.txt", "a") as log_file:
-                                    log_file.write(f"[{datetime.now()}] Converting geometry to WKT format for CSV compatibility\n")
-                                
-                                # Create a copy of the GeoDataFrame for processing
-                                df_for_csv = gdf.copy()
-                                
-                                # Convert geometry to WKT format
-                                if 'geometry' in df_for_csv.columns:
-                                    df_for_csv['wkt_geometry'] = df_for_csv['geometry'].to_wkt()
-                                    df_for_csv = df_for_csv.drop(columns=['geometry'])
+                                # Convert geometry to WKT using proper lambda function
+                                if 'geometry' in df_working.columns:
+                                    df_working['wkt_geometry'] = df_working['geometry'].apply(
+                                        lambda geom: geom.wkt if geom and hasattr(geom, 'wkt') else None
+                                    )
+                                    # Remove original geometry column
+                                    df_working = df_working.drop(columns=['geometry'])
                                 
                                 # Convert to standard pandas DataFrame
-                                df_clean = pd.DataFrame(df_for_csv)
-                                
-                                # Validate DataFrame before CSV operations
-                                if not isinstance(df_clean, pd.DataFrame):
-                                    raise TypeError("Failed to convert to pandas DataFrame")
-                                
-                                # Test CSV export capability
-                                csv_test = df_clean.to_csv(index=False)
+                                df_final = pd.DataFrame(df_working)
                                 
                                 with open("update_log.txt", "a") as log_file:
-                                    log_file.write(f"[{datetime.now()}] Successfully converted to CSV-compatible format\n")
+                                    log_file.write(f"[{datetime.now()}] Converted to DataFrame with WKT geometry\n")
                                 
-                                # Use spatial accessor for direct publishing
-                                feature_service = gdf.spatial.to_featurelayer(
+                                # Step 3: Validate DataFrame before any operations
+                                if not isinstance(df_final, pd.DataFrame):
+                                    raise TypeError(f"Expected pandas DataFrame, got {type(df_final).__name__}")
+                                
+                                # Test CSV conversion capability
+                                try:
+                                    test_csv = df_final.to_csv(index=False)
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] DataFrame CSV conversion test passed\n")
+                                except Exception as csv_error:
+                                    raise TypeError(f"DataFrame cannot be converted to CSV: {str(csv_error)}")
+                                
+                                # Step 4: Create layer using DataFrame import (primary method)
+                                feature_service = st.session_state.gis.content.import_data(
+                                    df_final,
                                     title=unique_title,
-                                    gis=st.session_state.gis,
                                     tags=[tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else ["shapefile", "uploaded"]
                                 )
                                 
@@ -1078,7 +1086,7 @@ def create_new_layer():
                                     raise Exception("Layer creation returned invalid result")
                                     
                                 with open("update_log.txt", "a") as log_file:
-                                    log_file.write(f"[{datetime.now()}] Published layer using spatial.to_featurelayer\n")
+                                    log_file.write(f"[{datetime.now()}] Published layer using DataFrame import method\n")
                             except Exception as spatial_error:
                                 # Enhanced fallback using safe data handling
                                 with open("update_log.txt", "a") as log_file:

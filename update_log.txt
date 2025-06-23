@@ -194,3 +194,30 @@
 [2025-06-23 04:32:31.727112] Spatial method failed: Layer creation returned invalid result, using enhanced fallback
 [2025-06-23 04:32:31.728199] Attempting CSV-compatible layer creation
 [2025-06-23 04:32:31.739588] Error creating layer 'MST Fiberr': name 'safe_error' is not defined
+[2025-06-23 04:33:56.738820] Starting shapefile processing
+[2025-06-23 04:33:56.744580] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:33:56.790501] Successfully read shapefile with GeoPandas
+[2025-06-23 04:33:56.793959] Added default ID column due to empty/missing attributes
+[2025-06-23 04:33:56.800571] Shapefile processing completed successfully
+[2025-06-23 04:33:56.804504] Cleaned up temporary files
+[2025-06-23 04:34:02.698650] Starting shapefile processing
+[2025-06-23 04:34:02.702615] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:34:02.714888] Successfully read shapefile with GeoPandas
+[2025-06-23 04:34:02.716864] Added default ID column due to empty/missing attributes
+[2025-06-23 04:34:02.718933] Shapefile processing completed successfully
+[2025-06-23 04:34:02.720325] Cleaned up temporary files
+[2025-06-23 04:34:05.738479] Starting shapefile processing
+[2025-06-23 04:34:05.741721] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:34:05.755507] Successfully read shapefile with GeoPandas
+[2025-06-23 04:34:05.758535] Added default ID column due to empty/missing attributes
+[2025-06-23 04:34:05.762311] Shapefile processing completed successfully
+[2025-06-23 04:34:05.763888] Cleaned up temporary files
+[2025-06-23 04:34:05.835947] Creating layer: MST Fiberr with 931 features
+[2025-06-23 04:34:05.837384] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:34:05.837722] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:34:05.838166] Converting geometry to WKT format for CSV compatibility
+[2025-06-23 04:34:05.850425] Successfully converted to CSV-compatible format
+[2025-06-23 04:34:06.745853] Spatial method failed: Layer creation returned invalid result, using enhanced fallback
+[2025-06-23 04:34:06.745962] Attempting CSV-compatible layer creation
+[2025-06-23 04:34:06.755929] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
+[2025-06-23 04:34:06.873556] Error creating layer 'MST Fiberr': 'dict' object has no attribute 'to_csv'
