@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import geopandas as gpd
+import numpy as np
 from arcgis.gis import GIS
 from arcgis.features import FeatureLayer, FeatureLayerCollection
 import zipfile
@@ -323,19 +324,19 @@ def view_content():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("📥 Export Layer List as CSV"):
-                    try:
-                        if not df.empty:
-                            csv_data = df.to_csv(index=False)
-                            st.download_button(
-                                label="Download CSV",
-                                data=csv_data,
-                                file_name=f"arcgis_layers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                                mime="text/csv"
-                            )
-                        else:
-                            st.warning("No data available to export")
-                    except Exception as e:
-                        st.error(f"Error exporting CSV: {str(e)}")
+                    success, csv_data, error = safe_csv_export(
+                        layer_data, 
+                        operation_name="Layer list export"
+                    )
+                    if success:
+                        st.download_button(
+                            label="Download CSV",
+                            data=csv_data,
+                            file_name=f"arcgis_layers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                            mime="text/csv"
+                        )
+                    else:
+                        st.error(f"Error exporting CSV: {error}")
             
             with col2:
                 # Layer preview selection
@@ -481,6 +482,87 @@ def update_existing_layer():
                                 st.error(f"Error updating layer: {str(e)}")
                 else:
                     st.error(message)
+
+def safe_dataframe_conversion(data, operation_name="operation"):
+    """
+    Safely convert various data types to DataFrame and handle CSV operations
+    Args:
+        data: Input data (dict, list, DataFrame, etc.)
+        operation_name: Name of operation for error reporting
+    Returns:
+        (success, dataframe, error_message)
+    """
+    try:
+        if isinstance(data, pd.DataFrame):
+            return True, data, None
+        elif isinstance(data, dict):
+            # Handle dictionary data
+            if not data:
+                return False, None, "Dictionary is empty"
+            
+            # Check if all values are lists/arrays of same length
+            lengths = []
+            for key, value in data.items():
+                if isinstance(value, (list, tuple, np.ndarray)):
+                    lengths.append(len(value))
+                else:
+                    # Single values - convert to list
+                    data[key] = [value]
+                    lengths.append(1)
+            
+            if lengths and all(l == lengths[0] for l in lengths):
+                df = pd.DataFrame(data)
+                return True, df, None
+            else:
+                return False, None, f"Dictionary values have inconsistent lengths: {lengths}"
+                
+        elif isinstance(data, (list, tuple)):
+            if not data:
+                return False, None, "List is empty"
+            
+            # Handle list of dictionaries
+            if all(isinstance(item, dict) for item in data):
+                df = pd.DataFrame(data)
+                return True, df, None
+            else:
+                # Handle simple list
+                df = pd.DataFrame({'value': data})
+                return True, df, None
+        else:
+            return False, None, f"Unsupported data type: {type(data)}"
+            
+    except Exception as e:
+        return False, None, f"Error converting data for {operation_name}: {str(e)}"
+
+
+def safe_csv_export(data, filename=None, operation_name="CSV export"):
+    """
+    Safely export data to CSV with proper error handling
+    Args:
+        data: Input data to export
+        filename: Optional filename
+        operation_name: Name of operation for error reporting
+    Returns:
+        (success, csv_string, error_message)
+    """
+    try:
+        # Convert to DataFrame if needed
+        success, df, error = safe_dataframe_conversion(data, operation_name)
+        if not success:
+            return False, None, error
+        
+        # Generate CSV string
+        csv_string = df.to_csv(index=False)
+        
+        # Optionally save to file
+        if filename:
+            df.to_csv(filename, index=False)
+            
+        return True, csv_string, None
+        
+    except Exception as e:
+        return False, None, f"Error during {operation_name}: {str(e)}"
+
 
 def process_shapefile_upload(zip_file):
     """
