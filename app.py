@@ -55,9 +55,8 @@ def authenticate():
     
     return True
 
-@st.cache_data(ttl=300)
 def get_feature_layers(username):
-    """Get user's existing feature layers with caching"""
+    """Get user's existing feature layers"""
     try:
         search_results = st.session_state.gis.content.search(
             query="owner:" + username,
@@ -69,9 +68,8 @@ def get_feature_layers(username):
         st.error(f"Error retrieving layers: {str(e)}")
         return []
 
-@st.cache_data(ttl=300)
 def get_web_maps(username):
-    """Get user's existing web maps with caching"""
+    """Get user's existing web maps"""
     try:
         search_results = st.session_state.gis.content.search(
             query="owner:" + username,
@@ -83,9 +81,8 @@ def get_web_maps(username):
         st.error(f"Error retrieving web maps: {str(e)}")
         return []
 
-@st.cache_data(ttl=600)
 def get_layer_preview_data(layer_id, max_features=10):
-    """Get preview data for a layer with caching"""
+    """Get preview data for a layer"""
     try:
         layer_item = st.session_state.gis.content.get(layer_id)
         layer_collection = FeatureLayerCollection.fromitem(layer_item)
