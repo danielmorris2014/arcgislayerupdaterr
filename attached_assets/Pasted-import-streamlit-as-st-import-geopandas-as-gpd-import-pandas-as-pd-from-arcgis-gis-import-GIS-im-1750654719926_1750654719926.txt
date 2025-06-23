@@ -1,0 +1,102 @@
+import streamlit as st
+import geopandas as gpd
+import pandas as pd
+from arcgis.gis import GIS
+import zipfile
+import os
+import logging
+import shutil
+
+# Prompt for Replit AI:
+"""
+Update the ArcGISLayerUpdater Streamlit app to fix the 'Error creating layer: 'dict' object has no attribute 'to_csv'' error. This error occurs when uploading a shapefile zip (e.g., MST_BURIED.zip) to create a new feature layer in ArcGIS Online. The issue arises because the data being passed to the layer creation step is a dictionary instead of a pandas DataFrame.
+
+To fix this, follow these steps:
+
+1. **Enforce DataFrame Integrity**: Add strict type checks to ensure the data remains a DataFrame throughout the process. Use `isinstance()` to verify types at each stage and raise errors if the type is incorrect.
+2. **Eliminate `to_csv` Dependency**: Use `gis.content.import_data()` directly with the DataFrame to create the layer, avoiding any calls to `to_csv`.
+3. **Add Debugging Tools**: Implement logging to track key steps and add a debug mode (via a Streamlit checkbox) to display data types and samples for troubleshooting.
+
+Below is sample code to implement the fix:
+
+# Configure logging
+logging.basicConfig(filename='app_log.txt', level=logging.INFO, format='%(asctime)s - %(message)s')
+
+# Streamlit interface
+st.title("ArcGIS Layer Updater")
+uploaded_file = st.file_uploader("Upload a shapefile ZIP (e.g., MST_BURIED.zip)", type="zip")
+debug_mode = st.checkbox("Enable Debug Mode")
+
+if uploaded_file:
+    try:
+        # Extract the uploaded zip file
+        temp_dir = "temp_shapefile"
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)  # Clean up any previous extractions
+        os.makedirs(temp_dir)
+        with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        logging.info("Extracted zip file successfully")
+        if debug_mode:
+            st.write("Extracted files:", os.listdir(temp_dir))
+
+        # Find the .shp file
+        shp_file = next((f for f in os.listdir(temp_dir) if f.endswith('.shp')), None)
+        if not shp_file:
+            raise FileNotFoundError("No .shp file found in the uploaded zip")
+        shp_path = os.path.join(temp_dir, shp_file)
+        logging.info(f"Found shapefile: {shp_file}")
+
+        # Load the shapefile into a GeoDataFrame
+        gdf = gpd.read_file(shp_path)
+        logging.info(f"Data type after reading shapefile: {type(gdf)}")
+        if not isinstance(gdf, gpd.GeoDataFrame):
+            raise TypeError(f"Expected GeoDataFrame, but got {type(gdf)}")
+        if gdf.empty:
+            raise ValueError("Shapefile contains no data")
+        if debug_mode:
+            st.write("GeoDataFrame type:", type(gdf))
+            st.write("GeoDataFrame sample:", gdf.head())
+
+        # Convert geometry to WKT and create a pandas DataFrame
+        gdf['wkt_geometry'] = gdf['geometry'].apply(lambda geom: geom.wkt if geom else None)
+        df = pd.DataFrame(gdf.drop(columns='geometry'))
+        logging.info(f"Data type after conversion: {type(df)}")
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError(f"Expected pandas DataFrame, but got {type(df)}")
+        if debug_mode:
+            st.write("DataFrame type:", type(df))
+            st.write("DataFrame sample:", df.head())
+
+        # Connect to ArcGIS Online and create the layer
+        gis = GIS("https://www.arcgis.com", "your_username", "your_password")  # Replace with your credentials
+        layer_title = f"New_Layer_{uploaded_file.name.split('.')[0]}"
+        logging.info(f"Data type before import_data: {type(df)}")
+        if debug_mode:
+            st.write("Data before import:", type(df), df.head())
+        
+        # Create the layer directly from the DataFrame
+        feature_layer = gis.content.import_data(df, title=layer_title)
+        logging.info(f"Layer created, type: {type(feature_layer)}")
+        st.success(f"Layer created successfully! Access it here: {gis.url}/home/item.html?id={feature_layer.id}")
+
+    except Exception as e:
+        st.error(f"Error creating layer: {str(e)}")
+        logging.error(f"Layer creation error: {str(e)}")
+        if debug_mode:
+            st.write("Error details:", str(e))
+
+    finally:
+        # Clean up temporary directory
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+            logging.info("Cleaned up temporary directory")
+
+To implement this fix:
+- Replace 'your_username' and 'your_password' with actual ArcGIS Online credentials.
+- Update your ArcGISLayerUpdater app with this code.
+- Test it by uploading the MST_BURIED.zip file and enabling debug mode to verify the data flow.
+- Check the Streamlit output and 'app_log.txt' for any issues.
+
+This solution ensures the data remains a DataFrame, avoids `to_csv`, and provides debugging tools to prevent future errors.
+"""

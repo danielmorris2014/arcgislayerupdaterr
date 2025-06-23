@@ -367,3 +367,18 @@
 [2025-06-23 04:48:37.009158] Attempting CSV-compatible layer creation
 [2025-06-23 04:48:37.188259] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
 [2025-06-23 04:48:39.388665] Error creating layer 'Peoples Fiber Mains': 'dict' object has no attribute 'to_csv'
+[2025-06-23 04:57:21.086143] Starting shapefile processing
+[2025-06-23 04:57:21.114056] Extracted files: ['FIBER_BURIED.shx', 'FIBER_BURIED.dbf', 'FIBER_BURIED.idx', 'FIBER_BURIED.prj', 'FIBER_BURIED.shp']
+[2025-06-23 04:57:21.155932] Successfully read shapefile with GeoPandas
+[2025-06-23 04:57:21.158032] Added default ID column due to empty/missing attributes
+[2025-06-23 04:57:21.160229] Shapefile processing completed successfully
+[2025-06-23 04:57:21.163006] Cleaned up temporary files
+[2025-06-23 04:57:21.238899] Creating layer: Peoples Fiber Mains with 16140 features
+[2025-06-23 04:57:21.239849] DataFrame shape: (16140, 2), columns: ['geometry', 'id']
+[2025-06-23 04:57:21.242653] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:57:21.243655] Validated GeoDataFrame with 16140 features
+[2025-06-23 04:57:21.244219] Using direct shapefile upload method to bypass CSV issues
+[2025-06-23 04:57:21.244801] Spatial method failed: cannot access local variable 'os' where it is not associated with a value, using enhanced fallback
+[2025-06-23 04:57:21.245519] Attempting CSV-compatible layer creation
+[2025-06-23 04:57:21.387572] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
+[2025-06-23 04:57:23.402292] Error creating layer 'Peoples Fiber Mains': 'dict' object has no attribute 'to_csv'
