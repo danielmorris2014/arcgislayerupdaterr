@@ -1122,7 +1122,7 @@ def create_new_layer():
                                 except Exception as csv_error:
                                     # Final fallback - create minimal feature collection without problematic data
                                     with open("update_log.txt", "a") as log_file:
-                                        log_file.write(f"[{datetime.now()}] Safe method failed: {str(safe_error)}, using minimal fallback\n")
+                                        log_file.write(f"[{datetime.now()}] CSV method failed: {str(csv_error)}, using minimal fallback\n")
                                     
                                     # Create simplified features with only basic attributes
                                     features = []

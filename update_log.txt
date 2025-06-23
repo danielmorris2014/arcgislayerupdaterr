@@ -142,3 +142,55 @@
 [2025-06-23 04:30:07.456781] Spatial method failed: Layer creation returned invalid result, using enhanced fallback
 [2025-06-23 04:30:07.457100] Safe method failed: name 'create_layer_with_safe_handling' is not defined, using minimal fallback
 [2025-06-23 04:30:07.572477] Error creating layer 'Peoples MST Fiber': 'dict' object has no attribute 'to_csv'
+[2025-06-23 04:32:13.970864] Starting shapefile processing
+[2025-06-23 04:32:13.975579] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:32:14.026694] Successfully read shapefile with GeoPandas
+[2025-06-23 04:32:14.028138] Added default ID column due to empty/missing attributes
+[2025-06-23 04:32:14.031366] Shapefile processing completed successfully
+[2025-06-23 04:32:14.032774] Cleaned up temporary files
+[2025-06-23 04:32:21.158309] Starting shapefile processing
+[2025-06-23 04:32:21.164767] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:32:21.175411] Successfully read shapefile with GeoPandas
+[2025-06-23 04:32:21.177480] Added default ID column due to empty/missing attributes
+[2025-06-23 04:32:21.178894] Shapefile processing completed successfully
+[2025-06-23 04:32:21.180077] Cleaned up temporary files
+[2025-06-23 04:32:21.855521] Starting shapefile processing
+[2025-06-23 04:32:21.861762] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:32:21.876723] Successfully read shapefile with GeoPandas
+[2025-06-23 04:32:21.879386] Added default ID column due to empty/missing attributes
+[2025-06-23 04:32:21.881932] Shapefile processing completed successfully
+[2025-06-23 04:32:21.883061] Cleaned up temporary files
+[2025-06-23 04:32:23.380651] Starting shapefile processing
+[2025-06-23 04:32:23.386850] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:32:23.398166] Successfully read shapefile with GeoPandas
+[2025-06-23 04:32:23.399896] Added default ID column due to empty/missing attributes
+[2025-06-23 04:32:23.401349] Shapefile processing completed successfully
+[2025-06-23 04:32:23.402908] Cleaned up temporary files
+[2025-06-23 04:32:23.478623] Creating layer: MST Fiberr with 931 features
+[2025-06-23 04:32:23.480596] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:32:23.481458] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:32:23.481600] Converting geometry to WKT format for CSV compatibility
+[2025-06-23 04:32:23.496924] Successfully converted to CSV-compatible format
+[2025-06-23 04:32:24.422221] Spatial method failed: Layer creation returned invalid result, using enhanced fallback
+[2025-06-23 04:32:24.423259] Attempting CSV-compatible layer creation
+[2025-06-23 04:32:24.434464] Error creating layer 'MST Fiberr': name 'safe_error' is not defined
+[2025-06-23 04:32:28.936075] Starting shapefile processing
+[2025-06-23 04:32:28.942864] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:32:28.953395] Successfully read shapefile with GeoPandas
+[2025-06-23 04:32:28.955221] Added default ID column due to empty/missing attributes
+[2025-06-23 04:32:28.957167] Shapefile processing completed successfully
+[2025-06-23 04:32:28.958144] Cleaned up temporary files
+[2025-06-23 04:32:30.835373] Starting shapefile processing
+[2025-06-23 04:32:30.841931] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:32:30.853783] Successfully read shapefile with GeoPandas
+[2025-06-23 04:32:30.855466] Added default ID column due to empty/missing attributes
+[2025-06-23 04:32:30.857496] Shapefile processing completed successfully
+[2025-06-23 04:32:30.860309] Cleaned up temporary files
+[2025-06-23 04:32:30.933363] Creating layer: MST Fiberr with 931 features
+[2025-06-23 04:32:30.934485] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:32:30.936091] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:32:30.938232] Converting geometry to WKT format for CSV compatibility
+[2025-06-23 04:32:30.949650] Successfully converted to CSV-compatible format
+[2025-06-23 04:32:31.727112] Spatial method failed: Layer creation returned invalid result, using enhanced fallback
+[2025-06-23 04:32:31.728199] Attempting CSV-compatible layer creation
+[2025-06-23 04:32:31.739588] Error creating layer 'MST Fiberr': name 'safe_error' is not defined
