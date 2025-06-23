@@ -2,6 +2,11 @@
 headless = true
 address = "0.0.0.0"
 port = 5000
+enableCORS = false
+enableXsrfProtection = false
 
-[theme]
-base = "light"
+[browser]
+gatherUsageStats = false
+
+[logger]
+level = "error"
