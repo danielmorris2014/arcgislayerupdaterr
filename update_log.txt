@@ -33,3 +33,41 @@
 [2025-06-23 04:16:04.149013] DataFrame shape: (931, 2), columns: ['geometry', 'id']
 [2025-06-23 04:16:05.050865] Published layer using spatial.to_featurelayer
 [2025-06-23 04:16:05.053565] Error creating layer 'Peoples MST Fiber': cannot access local variable 'layer_collection' where it is not associated with a value
+[2025-06-23 04:20:49.383433] Starting shapefile processing
+[2025-06-23 04:20:49.388393] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:20:49.441689] Successfully read shapefile with GeoPandas
+[2025-06-23 04:20:49.443570] Added default ID column due to empty/missing attributes
+[2025-06-23 04:20:49.445682] Shapefile processing completed successfully
+[2025-06-23 04:20:49.447550] Cleaned up temporary files
+[2025-06-23 04:20:57.264787] Starting shapefile processing
+[2025-06-23 04:20:57.270442] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:20:57.281488] Successfully read shapefile with GeoPandas
+[2025-06-23 04:20:57.283864] Added default ID column due to empty/missing attributes
+[2025-06-23 04:20:57.286000] Shapefile processing completed successfully
+[2025-06-23 04:20:57.287098] Cleaned up temporary files
+[2025-06-23 04:20:59.053282] Starting shapefile processing
+[2025-06-23 04:20:59.057031] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:20:59.068150] Successfully read shapefile with GeoPandas
+[2025-06-23 04:20:59.069769] Added default ID column due to empty/missing attributes
+[2025-06-23 04:20:59.071646] Shapefile processing completed successfully
+[2025-06-23 04:20:59.072715] Cleaned up temporary files
+[2025-06-23 04:21:00.609248] Starting shapefile processing
+[2025-06-23 04:21:00.615717] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:21:00.634718] Successfully read shapefile with GeoPandas
+[2025-06-23 04:21:00.638408] Added default ID column due to empty/missing attributes
+[2025-06-23 04:21:00.640175] Shapefile processing completed successfully
+[2025-06-23 04:21:00.640864] Cleaned up temporary files
+[2025-06-23 04:21:00.727122] Creating layer: Peoples MST Fiber with 931 features
+[2025-06-23 04:21:00.727724] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:21:01.629720] Published layer using spatial.to_featurelayer
+[2025-06-23 04:21:01.631963] Styling error: 'FeatureCollection' object has no attribute 'type'
+[2025-06-23 04:21:50.751554] Starting shapefile processing
+[2025-06-23 04:21:50.756737] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:21:50.767271] Successfully read shapefile with GeoPandas
+[2025-06-23 04:21:50.769171] Added default ID column due to empty/missing attributes
+[2025-06-23 04:21:50.771508] Shapefile processing completed successfully
+[2025-06-23 04:21:50.772308] Cleaned up temporary files
+[2025-06-23 04:21:50.844294] Creating layer: Peoples MST Fiber with 931 features
+[2025-06-23 04:21:50.844633] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:21:51.697418] Published layer using spatial.to_featurelayer
+[2025-06-23 04:21:51.699347] Styling error: 'FeatureCollection' object has no attribute 'type'

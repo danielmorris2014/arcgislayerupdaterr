@@ -1015,6 +1015,20 @@ def create_new_layer():
                             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                             unique_title = f"{layer_title}_{timestamp}"
                             
+                            # Verify authentication before publishing
+                            if not hasattr(st.session_state, 'gis') or st.session_state.gis is None:
+                                raise Exception("Not authenticated to ArcGIS Online")
+                            
+                            # Log authentication details
+                            try:
+                                current_user = st.session_state.gis.users.me
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Publishing as user: {current_user.username} to {st.session_state.gis.url}\n")
+                            except Exception as auth_check:
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Authentication check failed: {str(auth_check)}\n")
+                                raise Exception("Authentication expired or invalid")
+                            
                             # Use ArcGIS spatial accessor to publish directly
                             try:
                                 feature_service = gdf.spatial.to_featurelayer(
@@ -1022,6 +1036,15 @@ def create_new_layer():
                                     gis=st.session_state.gis,
                                     tags=[tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else ["shapefile", "uploaded"]
                                 )
+                                
+                                # Verify the service was created
+                                if feature_service and hasattr(feature_service, 'id'):
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] Successfully published layer ID: {feature_service.id}\n")
+                                        log_file.write(f"[{datetime.now()}] Layer URL: https://www.arcgis.com/home/item.html?id={feature_service.id}\n")
+                                else:
+                                    raise Exception("Layer creation returned invalid result")
+                                    
                                 with open("update_log.txt", "a") as log_file:
                                     log_file.write(f"[{datetime.now()}] Published layer using spatial.to_featurelayer\n")
                             except Exception as spatial_error:
@@ -1142,9 +1165,68 @@ def create_new_layer():
                                     log_file.write(f"[{datetime.now()}] Could not get URL: {str(url_error)}\n")
                                 feature_server_url = "URL not available"
                         
+                        # Verify layer is accessible in portal
+                        portal_link = f"https://www.arcgis.com/home/item.html?id={feature_service.id}"
+                        
                         st.success("Layer created successfully with custom styling!")
+                        st.markdown(f"**🔗 View in ArcGIS Online:** [Open Layer in Portal]({portal_link})")
                         st.info(f"Records created: {len(gdf)}")
                         st.code(f"FeatureServer URL: {feature_server_url}")
+                        
+                        # Verify layer appears in user's content
+                        try:
+                            import time
+                            time.sleep(3)  # Allow portal indexing time
+                            
+                            # Search for the newly created layer
+                            search_results = st.session_state.gis.content.search(
+                                query=f"id:{feature_service.id}",
+                                max_items=1
+                            )
+                            
+                            if search_results:
+                                st.info("✅ Layer verified and available in your ArcGIS Online portal")
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Layer successfully verified in portal\n")
+                            else:
+                                st.warning("⚠️ Layer created but may take a few minutes to appear in your content list. Use the direct link above to access it.")
+                                
+                                # Show troubleshooting information
+                                with st.expander("Troubleshooting - Why don't I see my layer?"):
+                                    st.markdown("""
+                                    **Common reasons layers may not appear immediately:**
+                                    
+                                    1. **Portal Indexing Delay** - ArcGIS Online may take 1-5 minutes to index new content
+                                    2. **Browser Cache** - Try refreshing your ArcGIS Online portal page
+                                    3. **Content Filters** - Check if filters are applied in your Content tab
+                                    4. **Organization Permissions** - Verify you have permission to create content
+                                    
+                                    **How to find your layer:**
+                                    - Use the direct portal link provided above
+                                    - In ArcGIS Online, go to Content > My Content
+                                    - Search for the layer title: `{unique_title}`
+                                    - Sort by "Modified" to see newest items first
+                                    
+                                    **Layer Details:**
+                                    - Layer ID: `{feature_service.id}`
+                                    - Created by: `{st.session_state.username}`
+                                    - Creation time: `{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}`
+                                    """)
+                                
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Layer not immediately visible in portal search\n")
+                                    
+                        except Exception as verify_error:
+                            st.warning(f"Layer created but verification failed: {str(verify_error)}")
+                            with open("update_log.txt", "a") as log_file:
+                                log_file.write(f"[{datetime.now()}] Portal verification error: {str(verify_error)}\n")
+                        
+                        # Log the portal link for debugging
+                        with open("update_log.txt", "a") as log_file:
+                            log_file.write(f"[{datetime.now()}] Layer portal link: {portal_link}\n")
+                            log_file.write(f"[{datetime.now()}] Layer title: {unique_title}\n")
+                            log_file.write(f"[{datetime.now()}] Current user: {st.session_state.username}\n")
+                            log_file.write(f"[{datetime.now()}] Layer ID for searching: {feature_service.id}\n")
                         
                         # Add to selected web maps
                         if web_maps and selected_maps:
