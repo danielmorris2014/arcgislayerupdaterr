@@ -28,10 +28,6 @@ args = "Simple ArcGIS App"
 task = "workflow.run"
 args = "Clean ArcGIS App"
 
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Fixed App"
-
 [[workflows.workflow]]
 name = "Streamlit App"
 author = "agent"
@@ -58,15 +54,6 @@ author = "agent"
 task = "shell.exec"
 args = "streamlit run clean_app.py --server.port 5002"
 waitForPort = 5002
-
-[[workflows.workflow]]
-name = "Fixed App"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "streamlit run simplified_app.py --server.port 5000 --server.address 0.0.0.0"
-waitForPort = 5000
 
 [[ports]]
 localPort = 5000
