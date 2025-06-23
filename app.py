@@ -1039,38 +1039,106 @@ def create_new_layer():
                             with open("update_log.txt", "a") as log_file:
                                 log_file.write(f"[{datetime.now()}] Validated GeoDataFrame with {len(gdf)} features\n")
                             
-                            # Step 2: Convert geometry to WKT and create DataFrame
+                            # Step 2: Enhanced type checking and WKT conversion
                             try:
-                                # Create working copy
-                                df_working = gdf.copy()
+                                # Log initial data type and structure
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Initial data type: {type(gdf)}\n")
+                                    log_file.write(f"[{datetime.now()}] Data shape: {gdf.shape if hasattr(gdf, 'shape') else 'No shape attribute'}\n")
+                                    log_file.write(f"[{datetime.now()}] Data columns: {list(gdf.columns) if hasattr(gdf, 'columns') else 'No columns attribute'}\n")
                                 
-                                # Convert geometry to WKT using proper lambda function
+                                # Create working copy and verify type
+                                df_working = gdf.copy()
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] After copy - type: {type(df_working)}\n")
+                                
+                                if not isinstance(df_working, gpd.GeoDataFrame):
+                                    raise TypeError(f"Copy failed - expected GeoDataFrame, got {type(df_working)}")
+                                
+                                # Convert geometry to WKT with enhanced error handling
                                 if 'geometry' in df_working.columns:
-                                    df_working['wkt_geometry'] = df_working['geometry'].apply(
-                                        lambda geom: geom.wkt if geom and hasattr(geom, 'wkt') else None
-                                    )
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] Converting {len(df_working)} geometries to WKT\n")
+                                    
+                                    # Safe WKT conversion with detailed logging
+                                    wkt_geometries = []
+                                    for idx, geom in enumerate(df_working['geometry']):
+                                        try:
+                                            if geom and hasattr(geom, 'wkt'):
+                                                wkt_geometries.append(geom.wkt)
+                                            else:
+                                                wkt_geometries.append(None)
+                                        except Exception as geom_error:
+                                            with open("update_log.txt", "a") as log_file:
+                                                log_file.write(f"[{datetime.now()}] Geometry {idx} conversion failed: {str(geom_error)}\n")
+                                            wkt_geometries.append(None)
+                                    
+                                    df_working['wkt_geometry'] = wkt_geometries
+                                    
                                     # Remove original geometry column
                                     df_working = df_working.drop(columns=['geometry'])
+                                    
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] After dropping geometry - type: {type(df_working)}\n")
                                 
-                                # Convert to standard pandas DataFrame
+                                # Force conversion to pandas DataFrame with explicit validation
                                 df_final = pd.DataFrame(df_working)
                                 
                                 with open("update_log.txt", "a") as log_file:
-                                    log_file.write(f"[{datetime.now()}] Converted to DataFrame with WKT geometry\n")
+                                    log_file.write(f"[{datetime.now()}] After pd.DataFrame() conversion - type: {type(df_final)}\n")
+                                    log_file.write(f"[{datetime.now()}] DataFrame shape: {df_final.shape}\n")
+                                    log_file.write(f"[{datetime.now()}] DataFrame columns: {list(df_final.columns)}\n")
                                 
-                                # Step 3: Validate DataFrame before any operations
+                                # Critical validation - stop immediately if not DataFrame
                                 if not isinstance(df_final, pd.DataFrame):
-                                    raise TypeError(f"Expected pandas DataFrame, got {type(df_final).__name__}")
-                                
-                                # Test CSV conversion capability
-                                try:
-                                    test_csv = df_final.to_csv(index=False)
+                                    error_msg = f"CRITICAL: Expected pandas DataFrame, got {type(df_final).__name__}"
                                     with open("update_log.txt", "a") as log_file:
-                                        log_file.write(f"[{datetime.now()}] DataFrame CSV conversion test passed\n")
-                                except Exception as csv_error:
-                                    raise TypeError(f"DataFrame cannot be converted to CSV: {str(csv_error)}")
+                                        log_file.write(f"[{datetime.now()}] {error_msg}\n")
+                                    raise TypeError(error_msg)
                                 
-                                # Step 4: Create layer using DataFrame import (primary method)
+                                # Test DataFrame methods before proceeding
+                                try:
+                                    # Test basic DataFrame operations
+                                    shape_test = df_final.shape
+                                    columns_test = list(df_final.columns)
+                                    head_test = df_final.head(1)
+                                    
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] DataFrame operations test passed\n")
+                                        log_file.write(f"[{datetime.now()}] Sample data: {head_test.to_dict('records') if not head_test.empty else 'Empty'}\n")
+                                    
+                                except Exception as df_test_error:
+                                    error_msg = f"DataFrame operations failed: {str(df_test_error)}"
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] {error_msg}\n")
+                                    raise TypeError(error_msg)
+                                
+                                # Test CSV conversion with detailed error reporting
+                                try:
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] Testing CSV conversion - data type: {type(df_final)}\n")
+                                    
+                                    test_csv = df_final.to_csv(index=False)
+                                    
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] CSV conversion successful - length: {len(test_csv)}\n")
+                                        
+                                except AttributeError as attr_error:
+                                    error_msg = f"CSV conversion failed - 'to_csv' attribute missing. Data type: {type(df_final)}"
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] {error_msg}\n")
+                                        log_file.write(f"[{datetime.now()}] Data content: {str(df_final)[:500]}\n")
+                                    raise TypeError(error_msg)
+                                except Exception as csv_error:
+                                    error_msg = f"CSV conversion failed: {str(csv_error)}"
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] {error_msg}\n")
+                                    raise TypeError(error_msg)
+                                
+                                # Step 3: Create layer using validated DataFrame
+                                with open("update_log.txt", "a") as log_file:
+                                    log_file.write(f"[{datetime.now()}] Attempting layer creation with type: {type(df_final)}\n")
+                                
                                 feature_service = st.session_state.gis.content.import_data(
                                     df_final,
                                     title=unique_title,
@@ -1086,7 +1154,7 @@ def create_new_layer():
                                     raise Exception("Layer creation returned invalid result")
                                     
                                 with open("update_log.txt", "a") as log_file:
-                                    log_file.write(f"[{datetime.now()}] Published layer using DataFrame import method\n")
+                                    log_file.write(f"[{datetime.now()}] Published layer using enhanced DataFrame validation\n")
                             except Exception as spatial_error:
                                 # Enhanced fallback using safe data handling
                                 with open("update_log.txt", "a") as log_file:
