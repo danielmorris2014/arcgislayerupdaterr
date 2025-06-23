@@ -289,3 +289,81 @@
 [2025-06-23 04:44:30.755010] Attempting CSV-compatible layer creation
 [2025-06-23 04:44:30.764896] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
 [2025-06-23 04:44:30.899286] Error creating layer 'MST Fiberr': 'dict' object has no attribute 'to_csv'
+[2025-06-23 04:46:31.115902] Starting shapefile processing
+[2025-06-23 04:46:31.119672] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:46:31.164217] Successfully read shapefile with GeoPandas
+[2025-06-23 04:46:31.165411] Added default ID column due to empty/missing attributes
+[2025-06-23 04:46:31.167928] Shapefile processing completed successfully
+[2025-06-23 04:46:31.169792] Cleaned up temporary files
+[2025-06-23 04:46:37.079497] Starting shapefile processing
+[2025-06-23 04:46:37.083534] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:46:37.095622] Successfully read shapefile with GeoPandas
+[2025-06-23 04:46:37.097952] Added default ID column due to empty/missing attributes
+[2025-06-23 04:46:37.099547] Shapefile processing completed successfully
+[2025-06-23 04:46:37.100476] Cleaned up temporary files
+[2025-06-23 04:46:50.081457] Starting shapefile processing
+[2025-06-23 04:46:50.087112] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:46:50.097215] Successfully read shapefile with GeoPandas
+[2025-06-23 04:46:50.098755] Added default ID column due to empty/missing attributes
+[2025-06-23 04:46:50.100572] Shapefile processing completed successfully
+[2025-06-23 04:46:50.101604] Cleaned up temporary files
+[2025-06-23 04:46:52.111953] Starting shapefile processing
+[2025-06-23 04:46:52.118475] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:46:52.129803] Successfully read shapefile with GeoPandas
+[2025-06-23 04:46:52.132322] Added default ID column due to empty/missing attributes
+[2025-06-23 04:46:52.134154] Shapefile processing completed successfully
+[2025-06-23 04:46:52.135226] Cleaned up temporary files
+[2025-06-23 04:46:52.215534] Creating layer: MST Fiberr with 931 features
+[2025-06-23 04:46:52.216951] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:46:52.218984] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:46:52.219338] Validated GeoDataFrame with 931 features
+[2025-06-23 04:46:52.220275] Using direct shapefile upload method to bypass CSV issues
+[2025-06-23 04:46:52.221271] Spatial method failed: cannot access local variable 'os' where it is not associated with a value, using enhanced fallback
+[2025-06-23 04:46:52.221620] Attempting CSV-compatible layer creation
+[2025-06-23 04:46:52.232911] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
+[2025-06-23 04:46:52.352707] Error creating layer 'MST Fiberr': 'dict' object has no attribute 'to_csv'
+[2025-06-23 04:48:16.990657] Starting shapefile processing
+[2025-06-23 04:48:17.018730] Extracted files: ['FIBER_BURIED.shx', 'FIBER_BURIED.dbf', 'FIBER_BURIED.idx', 'FIBER_BURIED.prj', 'FIBER_BURIED.shp']
+[2025-06-23 04:48:17.059755] Successfully read shapefile with GeoPandas
+[2025-06-23 04:48:17.061291] Added default ID column due to empty/missing attributes
+[2025-06-23 04:48:17.063214] Shapefile processing completed successfully
+[2025-06-23 04:48:17.066357] Cleaned up temporary files
+[2025-06-23 04:48:23.755316] Starting shapefile processing
+[2025-06-23 04:48:23.781249] Extracted files: ['FIBER_BURIED.shx', 'FIBER_BURIED.dbf', 'FIBER_BURIED.idx', 'FIBER_BURIED.prj', 'FIBER_BURIED.shp']
+[2025-06-23 04:48:23.823170] Successfully read shapefile with GeoPandas
+[2025-06-23 04:48:23.825558] Added default ID column due to empty/missing attributes
+[2025-06-23 04:48:23.828338] Shapefile processing completed successfully
+[2025-06-23 04:48:23.830916] Cleaned up temporary files
+[2025-06-23 04:48:30.662767] Starting shapefile processing
+[2025-06-23 04:48:30.689885] Extracted files: ['FIBER_BURIED.shx', 'FIBER_BURIED.dbf', 'FIBER_BURIED.idx', 'FIBER_BURIED.prj', 'FIBER_BURIED.shp']
+[2025-06-23 04:48:30.730530] Successfully read shapefile with GeoPandas
+[2025-06-23 04:48:30.732609] Added default ID column due to empty/missing attributes
+[2025-06-23 04:48:30.734380] Shapefile processing completed successfully
+[2025-06-23 04:48:30.737034] Cleaned up temporary files
+[2025-06-23 04:48:33.745207] Starting shapefile processing
+[2025-06-23 04:48:33.773183] Extracted files: ['FIBER_BURIED.shx', 'FIBER_BURIED.dbf', 'FIBER_BURIED.idx', 'FIBER_BURIED.prj', 'FIBER_BURIED.shp']
+[2025-06-23 04:48:33.816159] Successfully read shapefile with GeoPandas
+[2025-06-23 04:48:33.818434] Added default ID column due to empty/missing attributes
+[2025-06-23 04:48:33.821163] Shapefile processing completed successfully
+[2025-06-23 04:48:33.823257] Cleaned up temporary files
+[2025-06-23 04:48:35.118379] Starting shapefile processing
+[2025-06-23 04:48:35.148476] Extracted files: ['FIBER_BURIED.shx', 'FIBER_BURIED.dbf', 'FIBER_BURIED.idx', 'FIBER_BURIED.prj', 'FIBER_BURIED.shp']
+[2025-06-23 04:48:35.188454] Successfully read shapefile with GeoPandas
+[2025-06-23 04:48:35.190044] Added default ID column due to empty/missing attributes
+[2025-06-23 04:48:35.196354] Shapefile processing completed successfully
+[2025-06-23 04:48:35.199246] Cleaned up temporary files
+[2025-06-23 04:48:36.842404] Starting shapefile processing
+[2025-06-23 04:48:36.871183] Extracted files: ['FIBER_BURIED.shx', 'FIBER_BURIED.dbf', 'FIBER_BURIED.idx', 'FIBER_BURIED.prj', 'FIBER_BURIED.shp']
+[2025-06-23 04:48:36.915867] Successfully read shapefile with GeoPandas
+[2025-06-23 04:48:36.919088] Added default ID column due to empty/missing attributes
+[2025-06-23 04:48:36.921913] Shapefile processing completed successfully
+[2025-06-23 04:48:36.926121] Cleaned up temporary files
+[2025-06-23 04:48:37.002533] Creating layer: Peoples Fiber Mains with 16140 features
+[2025-06-23 04:48:37.003735] DataFrame shape: (16140, 2), columns: ['geometry', 'id']
+[2025-06-23 04:48:37.004958] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:48:37.006626] Validated GeoDataFrame with 16140 features
+[2025-06-23 04:48:37.007857] Using direct shapefile upload method to bypass CSV issues
+[2025-06-23 04:48:37.008808] Spatial method failed: cannot access local variable 'os' where it is not associated with a value, using enhanced fallback
+[2025-06-23 04:48:37.009158] Attempting CSV-compatible layer creation
+[2025-06-23 04:48:37.188259] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
+[2025-06-23 04:48:39.388665] Error creating layer 'Peoples Fiber Mains': 'dict' object has no attribute 'to_csv'
