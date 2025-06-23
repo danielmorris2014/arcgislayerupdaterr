@@ -171,7 +171,7 @@ def create_layer_map(df, layer_title):
                 # Add geometry to map
                 folium.GeoJson(
                     row.geometry.__geo_interface__,
-                    popup=folium.Popup(popup_content, max_width=300),
+                    popup=popup_content,
                     tooltip=f"Feature {idx + 1}"
                 ).add_to(m)
         
@@ -779,100 +779,152 @@ def merge_layers():
                 st.error(f"Error merging layers: {str(e)}")
 
 def delete_layer():
-    """Delete a feature layer"""
+    """Delete a feature layer with enhanced safety and preview"""
     st.header("🗑️ Delete Layer")
     
-    st.warning("⚠️ This action cannot be undone. Please be careful when deleting layers.")
+    st.warning("This action cannot be undone. Please be careful when deleting layers.")
     
-    feature_layers = get_feature_layers()
+    feature_layers = get_feature_layers(st.session_state.username)
     
     if not feature_layers:
         st.info("No feature layers found in your account")
         return
     
-    # Layer selection
-    layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
-    selected_layer_key = st.selectbox(
-        "Select layer to delete",
-        options=[""] + list(layer_options.keys()),
-        help="Choose the layer you want to delete"
-    )
-    
-    if selected_layer_key:
-        selected_layer = layer_options[selected_layer_key]
-        
-        # Display layer info
-        st.subheader("Layer Information")
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.write(f"**Title:** {selected_layer.title}")
-            st.write(f"**Type:** {selected_layer.type}")
-            st.write(f"**Owner:** {selected_layer.owner}")
-        
-        with col2:
-            st.write(f"**Created:** {datetime.fromtimestamp(selected_layer.created/1000).strftime('%Y-%m-%d %H:%M:%S')}")
-            st.write(f"**ID:** {selected_layer.id}")
-        
-        # Confirmation
-        st.subheader("Confirm Deletion")
-        confirm_text = st.text_input(
-            f"Type '{selected_layer.title}' to confirm deletion",
-            placeholder=selected_layer.title
+    # Layer selection with preview
+    with st.expander("📋 Select Layer to Delete", expanded=True):
+        layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+        selected_layer_key = st.selectbox(
+            "Select layer to delete",
+            options=[""] + list(layer_options.keys()),
+            help="Choose the layer you want to delete"
         )
         
-        if confirm_text == selected_layer.title:
-            if st.button("🗑️ DELETE LAYER", type="primary"):
-                try:
-                    with st.spinner("Deleting layer..."):
-                        result = selected_layer.delete()
-                        
-                        if result:
-                            st.success(f"Layer '{selected_layer.title}' has been deleted successfully")
-                        else:
-                            st.error("Failed to delete the layer")
-                            
-                except Exception as e:
-                    st.error(f"Error deleting layer: {str(e)}")
-        else:
-            st.info("Enter the exact layer title above to enable deletion")
+        if selected_layer_key:
+            selected_layer = layer_options[selected_layer_key]
+            
+            # Display layer info
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.subheader("Layer Information")
+                info_col1, info_col2 = st.columns(2)
+                
+                with info_col1:
+                    st.write(f"**Title:** {selected_layer.title}")
+                    st.write(f"**Type:** {selected_layer.type}")
+                    st.write(f"**Owner:** {selected_layer.owner}")
+                
+                with info_col2:
+                    st.write(f"**Created:** {datetime.fromtimestamp(selected_layer.created/1000).strftime('%Y-%m-%d %H:%M:%S')}")
+                    st.write(f"**ID:** {selected_layer.id}")
+            
+            with col2:
+                if st.button("👀 Preview Before Delete", key="preview_delete"):
+                    preview_layer_data(selected_layer)
+    
+    # Confirmation section
+    if selected_layer_key:
+        with st.expander("⚠️ Confirm Deletion", expanded=True):
+            st.error("This action will permanently delete the selected layer and all its data. This cannot be undone.")
+            
+            # Double confirmation
+            confirm_checkbox = st.checkbox("I understand this action cannot be undone")
+            
+            if confirm_checkbox:
+                confirm_text = st.text_input(
+                    f"Type '{selected_layer.title}' to confirm deletion",
+                    placeholder=selected_layer.title,
+                    help="Type the exact layer title to enable deletion"
+                )
+                
+                if confirm_text == selected_layer.title:
+                    if st.button("🗑️ DELETE LAYER PERMANENTLY", type="primary"):
+                        try:
+                            with st.spinner("Deleting layer..."):
+                                result = selected_layer.delete()
+                                
+                                if result:
+                                    st.success(f"Layer '{selected_layer.title}' has been deleted successfully")
+                                    st.info("The layer has been permanently removed from your ArcGIS Online account")
+                                else:
+                                    st.error("Failed to delete the layer")
+                                    
+                        except Exception as e:
+                            st.error(f"Error deleting layer: {str(e)}")
+                else:
+                    st.info("Enter the exact layer title above to enable deletion")
+            else:
+                st.info("Check the confirmation box to proceed with deletion")
+
+def show_help():
+    """Display help and guidance for using the application"""
+    with st.sidebar.expander("❓ Help & Guide"):
+        st.write("**Quick Start Guide:**")
+        st.write("1. **View Layers** - Browse your existing feature layers and preview their data")
+        st.write("2. **Update Layer** - Replace data in existing layers with new shapefiles")
+        st.write("3. **Create Layer** - Upload shapefiles to create new feature layers")
+        st.write("4. **Merge Layers** - Combine multiple layers into one new layer")
+        st.write("5. **Delete Layer** - Permanently remove layers from your account")
+        
+        st.write("**Tips:**")
+        st.write("• Use the preview feature to examine data before operations")
+        st.write("• Ensure layers have compatible geometry types before merging")
+        st.write("• FeatureServer URLs are displayed for external integrations")
+        st.write("• All operations include confirmation steps for safety")
+        
+        st.write("**File Requirements:**")
+        st.write("• Upload zip files containing .shp, .shx, and .dbf files")
+        st.write("• Include .prj files for proper coordinate system handling")
+        st.write("• Maximum 10 features shown in previews for performance")
 
 def main():
-    """Main application"""
+    """Enhanced main application with improved navigation and help"""
     st.title("🗺️ ArcGIS Layer Manager")
-    st.markdown("Manage your ArcGIS Online feature layers with ease")
+    st.markdown("Professional ArcGIS Online feature layer management with data preview capabilities")
     
     # Authentication
     if not authenticate():
         return
     
-    # Sidebar navigation
-    st.sidebar.header("Navigation")
+    # Enhanced sidebar navigation
+    st.sidebar.header("🧭 Navigation")
+    
+    # User info section
+    if hasattr(st.session_state, 'gis'):
+        user = st.session_state.gis.users.me
+        with st.sidebar.container():
+            st.write(f"**👤 User:** {user.username}")
+            st.write(f"**🔑 Role:** {user.role}")
+            
+            # Quick stats
+            try:
+                feature_layers = get_feature_layers(st.session_state.username)
+                web_maps = get_web_maps(st.session_state.username)
+                st.write(f"**📊 Layers:** {len(feature_layers)}")
+                st.write(f"**🗺️ Maps:** {len(web_maps)}")
+            except:
+                pass
+    
+    st.sidebar.markdown("---")
+    
+    # Page selection with enhanced descriptions
+    page = st.sidebar.selectbox(
+        "Select Action",
+        ["View Layers", "Update Layer", "Create Layer", "Merge Layers", "Delete Layer"],
+        help="Choose the operation you want to perform"
+    )
+    
+    # Help section
+    show_help()
     
     # Logout button
-    if st.sidebar.button("🚪 Logout"):
+    st.sidebar.markdown("---")
+    if st.sidebar.button("🚪 Logout", help="Sign out and clear session"):
         for key in list(st.session_state.keys()):
             del st.session_state[key]
         st.rerun()
     
-    st.sidebar.markdown("---")
-    
-    # User info
-    if hasattr(st.session_state, 'gis'):
-        user = st.session_state.gis.users.me
-        st.sidebar.write(f"**User:** {user.username}")
-        st.sidebar.write(f"**Role:** {user.role}")
-    
-    st.sidebar.markdown("---")
-    
-    # Page selection
-    page = st.sidebar.selectbox(
-        "Select Action",
-        ["View Content", "Update Layer", "Create Layer", "Merge Layers", "Delete Layer"]
-    )
-    
-    # Display selected page
-    if page == "View Content":
+    # Display selected page with enhanced routing
+    if page == "View Layers":
         view_content()
     elif page == "Update Layer":
         update_existing_layer()
