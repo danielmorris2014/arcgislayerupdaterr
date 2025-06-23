@@ -476,98 +476,140 @@ def update_existing_layer():
                 else:
                     st.error(message)
 
-def get_shapefile_info_geopandas(zip_file):
-    """Get shapefile geometry type and field names using geopandas"""
+def process_shapefile_upload(zip_file):
+    """
+    Comprehensive shapefile processing with detailed error handling
+    Returns: (success, geometry_type, field_names, gdf, error_message)
+    """
     temp_dir = None
     try:
-        # Save uploaded file to temporary location
-        temp_dir = tempfile.mkdtemp()
+        # Create temporary directory
+        temp_dir = tempfile.mkdtemp(prefix="shapefile_")
         zip_path = os.path.join(temp_dir, "uploaded.zip")
         
-        # Reset file pointer to beginning
+        # Save uploaded file
         zip_file.seek(0)
         with open(zip_path, "wb") as f:
             f.write(zip_file.getvalue())
         
-        # Extract zip file and list contents
+        # Extract and analyze zip contents
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             file_list = zip_ref.namelist()
             zip_ref.extractall(temp_dir)
         
-        # Debug: List all extracted files
-        extracted_files = []
+        # Find all files recursively
+        all_files = []
         for root, dirs, files in os.walk(temp_dir):
             for file in files:
-                extracted_files.append(os.path.join(root, file))
+                full_path = os.path.join(root, file)
+                relative_path = os.path.relpath(full_path, temp_dir)
+                all_files.append((full_path, relative_path, file))
         
-        # Find shapefile with more flexible search
+        # Find shapefile components
         shp_files = []
-        for file_path in extracted_files:
-            if file_path.lower().endswith('.shp'):
-                shp_files.append(file_path)
+        for full_path, rel_path, filename in all_files:
+            if filename.lower().endswith('.shp'):
+                shp_files.append((full_path, filename))
         
         if not shp_files:
-            return None, None, f"No .shp file found. Files in zip: {file_list}"
+            file_names = [f[2] for f in all_files]
+            return False, None, None, None, f"No .shp file found. Available files: {file_names}"
         
-        shp_path = shp_files[0]
-        
-        # Check for required components
+        # Use first shapefile found
+        shp_path, shp_filename = shp_files[0]
         base_name = os.path.splitext(shp_path)[0]
-        required_extensions = ['.shx', '.dbf']
-        missing_files = []
         
-        for ext in required_extensions:
-            if not os.path.exists(base_name + ext):
-                # Try case variations
-                if not os.path.exists(base_name + ext.upper()):
-                    missing_files.append(ext)
+        # Check for required components with case-insensitive search
+        required_extensions = {'.shx': False, '.dbf': False}
+        optional_extensions = {'.prj': False, '.cpg': False}
         
-        if missing_files:
-            return None, None, f"Missing required files: {missing_files}. Shapefile needs .shp, .shx, and .dbf files."
+        # Check all variations
+        for full_path, rel_path, filename in all_files:
+            file_base = os.path.splitext(filename)[0].lower()
+            shp_base = os.path.splitext(shp_filename)[0].lower()
+            
+            if file_base == shp_base:
+                ext = os.path.splitext(filename)[1].lower()
+                if ext in required_extensions:
+                    required_extensions[ext] = True
+                elif ext in optional_extensions:
+                    optional_extensions[ext] = True
         
-        # Try to read shapefile with geopandas
+        # Check for missing required files
+        missing_required = [ext for ext, found in required_extensions.items() if not found]
+        if missing_required:
+            return False, None, None, None, f"Missing required files: {missing_required}. Shapefile needs .shp, .shx, and .dbf components."
+        
+        # Attempt to read shapefile
         try:
             gdf = gpd.read_file(shp_path)
         except Exception as read_error:
-            return None, None, f"Could not read shapefile: {str(read_error)}"
+            return False, None, None, None, f"GeoPandas read error: {str(read_error)}"
+        
+        # Validate data
+        if gdf is None:
+            return False, None, None, None, "Shapefile read returned None"
         
         if len(gdf) == 0:
-            return None, None, "Shapefile contains no features"
+            return False, None, None, None, "Shapefile contains no features"
         
-        # Get geometry type from the GeoDataFrame
-        if hasattr(gdf, 'geometry') and len(gdf) > 0:
-            # Try multiple ways to get geometry type
-            first_geom = gdf.geometry.iloc[0]
-            if first_geom is not None:
-                geom_type = first_geom.geom_type
-            else:
-                # Try getting from geometry column type
-                geom_type = str(gdf.geometry.dtype).split('.')[-1] if hasattr(gdf.geometry, 'dtype') else 'Unknown'
-            
-            # Map geopandas geometry types to standard names
-            if geom_type.lower() in ['point', 'multipoint']:
-                geometry_type = 'Point'
-            elif geom_type.lower() in ['linestring', 'multilinestring']:
-                geometry_type = 'LineString'
-            elif geom_type.lower() in ['polygon', 'multipolygon']:
-                geometry_type = 'Polygon'
-            else:
-                geometry_type = geom_type
-        else:
-            geometry_type = 'Unknown'
+        # Check geometry column
+        if 'geometry' not in gdf.columns:
+            return False, None, None, None, "No geometry column found in shapefile"
         
-        # Get field names (excluding geometry column)
+        # Analyze geometry
+        valid_geometries = gdf.geometry.notna()
+        if not valid_geometries.any():
+            return False, None, None, None, "All geometries are null/invalid"
+        
+        # Get geometry type from first valid geometry
+        first_valid_geom = gdf.geometry[valid_geometries].iloc[0]
+        geom_type = first_valid_geom.geom_type
+        
+        # Standardize geometry type names
+        geometry_type_map = {
+            'Point': 'Point', 'MultiPoint': 'Point',
+            'LineString': 'LineString', 'MultiLineString': 'LineString',
+            'Polygon': 'Polygon', 'MultiPolygon': 'Polygon'
+        }
+        geometry_type = geometry_type_map.get(geom_type, geom_type)
+        
+        # Get field names (excluding geometry)
         field_names = [col for col in gdf.columns if col.lower() not in ['geometry', 'shape']]
         
-        # Clean up
-        shutil.rmtree(temp_dir)
+        # Handle coordinate system
+        if gdf.crs is None:
+            st.warning("No coordinate system defined. Assuming WGS84 (EPSG:4326)")
+            gdf.crs = "EPSG:4326"
+        elif gdf.crs.to_string() != "EPSG:4326":
+            try:
+                original_crs = gdf.crs.to_string()
+                gdf = gdf.to_crs("EPSG:4326")
+                st.info(f"Reprojected from {original_crs} to WGS84")
+            except Exception as proj_error:
+                st.warning(f"Could not reproject from {gdf.crs}: {str(proj_error)}")
         
-        return geometry_type, field_names, None
+        return True, geometry_type, field_names, gdf, None
         
     except Exception as e:
+        return False, None, None, None, f"Unexpected error: {str(e)}"
+    
+    finally:
+        # Clean up temporary directory
         if temp_dir and os.path.exists(temp_dir):
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        return None, None, f"Error processing shapefile: {str(e)}"
+            try:
+                shutil.rmtree(temp_dir)
+            except:
+                pass  # Ignore cleanup errors
+
+
+def get_shapefile_info_geopandas(zip_file):
+    """Legacy wrapper for compatibility"""
+    success, geometry_type, field_names, gdf, error = process_shapefile_upload(zip_file)
+    if success:
+        return geometry_type, field_names, None
+    else:
+        return None, None, error
 
 def create_new_layer():
     """Create a new feature layer with enhanced UI and customization"""
@@ -608,22 +650,27 @@ def create_new_layer():
             if is_valid:
                 st.success(message)
                 
-                # Get shapefile information using geopandas
+                # Process shapefile with comprehensive error handling
                 with st.spinner("Analyzing shapefile..."):
-                    geometry_type, field_names, error = get_shapefile_info_geopandas(uploaded_file)
+                    success, geometry_type, field_names, gdf, error = process_shapefile_upload(uploaded_file)
                 
-                if error:
-                    st.error(f"Error reading shapefile: {error}")
+                if not success:
+                    st.error(f"Shapefile processing failed: {error}")
                     
-                    # Try to provide more debugging information
+                    # Log error to file
+                    with open("update_log.txt", "a") as log_file:
+                        log_file.write(f"[{datetime.now()}] Shapefile upload error: {error}\n")
+                    
+                    # Provide debugging information
                     with st.expander("🔍 Debugging Information"):
                         st.write("**Troubleshooting steps:**")
-                        st.write("1. Ensure your zip file contains .shp, .shx, and .dbf files")
+                        st.write("1. Ensure your zip file contains .shp, .shx, and .dbf files with matching names")
                         st.write("2. Check that the shapefile is not corrupted")
                         st.write("3. Verify the coordinate system is properly defined")
                         st.write("4. Try re-exporting the shapefile from your GIS software")
+                        st.write("5. Ensure all files have the same base name (e.g., data.shp, data.shx, data.dbf)")
                         
-                        # Try to show zip contents
+                        # Show zip contents for debugging
                         try:
                             uploaded_file.seek(0)
                             with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
@@ -634,10 +681,25 @@ def create_new_layer():
                         except Exception as e:
                             st.write(f"Could not read zip contents: {str(e)}")
                 
-                elif geometry_type and field_names:
-                    st.success(f"Successfully analyzed shapefile!")
-                    st.info(f"Detected geometry type: **{geometry_type}**")
-                    st.info(f"Available fields: **{', '.join(field_names)}**")
+                else:
+                    st.success(f"Successfully processed shapefile with {len(gdf)} features!")
+                    
+                    # Display shapefile information
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.info(f"**Geometry Type:** {geometry_type}")
+                        st.info(f"**Feature Count:** {len(gdf)}")
+                    with col2:
+                        st.info(f"**Coordinate System:** {gdf.crs}")
+                        st.info(f"**Field Count:** {len(field_names)}")
+                    
+                    if field_names:
+                        st.write(f"**Available fields:** {', '.join(field_names)}")
+                    
+                    # Store the processed data in session state for later use
+                    st.session_state['processed_gdf'] = gdf
+                    st.session_state['shapefile_geometry_type'] = geometry_type
+                    st.session_state['shapefile_fields'] = field_names
                     
                     # Styling configuration
                     with st.expander("🎨 Layer Styling", expanded=True):
@@ -671,9 +733,14 @@ def create_new_layer():
                             )
                         elif enable_popups:
                             st.warning("No fields available for popup configuration")
-                else:
-                    st.error("Could not read shapefile geometry or fields")
-                    st.info("Please check that your zip file contains a valid shapefile with .shp, .shx, and .dbf components")
+                    
+                    # Data preview
+                    with st.expander("📊 Data Preview", expanded=False):
+                        if len(gdf) > 0:
+                            st.write("**First 5 features:**")
+                            # Show non-geometry columns for preview
+                            preview_df = gdf[field_names].head()
+                            st.dataframe(preview_df)
             else:
                 st.error(message)
     
@@ -719,39 +786,78 @@ def create_new_layer():
                     st.write("• Popups: Disabled")
             
             if st.button("🚀 Create and Publish Layer", type="primary"):
-                try:
-                    with st.spinner("Creating new layer with custom styling..."):
-                        # Extract and load shapefile
-                        gdf, temp_dir = extract_and_load_shapefile(uploaded_file)
-                        
-                        # Prepare item properties
-                        item_properties = {
-                            'title': layer_title,
-                            'type': 'Shapefile',
-                            'tags': [tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else []
-                        }
-                        
-                        if layer_description:
-                            item_properties['description'] = layer_description
-                        
-                        # Create temporary zip for upload using layer title
-                        safe_title = "".join(c for c in layer_title if c.isalnum() or c in (' ', '-', '_')).rstrip()
-                        safe_title = safe_title.replace(' ', '_')
-                        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        unique_zip_name = f"{safe_title}_{timestamp}.zip"
-                        temp_zip_path = os.path.join(temp_dir, unique_zip_name)
-                        with zipfile.ZipFile(temp_zip_path, 'w') as zip_ref:
-                            for root, dirs, files in os.walk(temp_dir):
-                                for file in files:
-                                    if not file.endswith('.zip'):
-                                        file_path = os.path.join(root, file)
-                                        zip_ref.write(file_path, file)
-                        
-                        # Add item to ArcGIS Online
-                        item = st.session_state.gis.content.add(item_properties, temp_zip_path)
-                        
-                        # Publish as feature service
-                        feature_service = item.publish()
+                if 'processed_gdf' not in st.session_state:
+                    st.error("Please upload and process a shapefile first")
+                else:
+                    try:
+                        with st.spinner("Creating new layer with custom styling..."):
+                            # Get processed shapefile data
+                            gdf = st.session_state['processed_gdf']
+                            geometry_type = st.session_state['shapefile_geometry_type']
+                            field_names = st.session_state['shapefile_fields']
+                            
+                            # Log creation attempt
+                            with open("update_log.txt", "a") as log_file:
+                                log_file.write(f"[{datetime.now()}] Creating layer: {layer_title} with {len(gdf)} features\n")
+                            
+                            # Convert GeoDataFrame to feature collection for ArcGIS
+                            features = []
+                            for idx, row in gdf.iterrows():
+                                geom = row.geometry
+                                if geom is not None:
+                                    # Convert geometry to ArcGIS format
+                                    geom_dict = geom.__geo_interface__
+                                    
+                                    # Prepare attributes
+                                    attributes = {}
+                                    for field in field_names:
+                                        value = row[field]
+                                        if pd.isna(value):
+                                            attributes[field] = None
+                                        else:
+                                            attributes[field] = value
+                                    
+                                    features.append({
+                                        'geometry': geom_dict,
+                                        'attributes': attributes
+                                    })
+                            
+                            # Create feature collection
+                            feature_collection = {
+                                'layerDefinition': {
+                                    'geometryType': f'esriGeometry{geometry_type}',
+                                    'fields': []
+                                },
+                                'featureSet': {
+                                    'features': features
+                                }
+                            }
+                            
+                            # Add field definitions
+                            for field in field_names:
+                                field_type = str(gdf[field].dtype)
+                                if 'int' in field_type:
+                                    esri_type = 'esriFieldTypeInteger'
+                                elif 'float' in field_type:
+                                    esri_type = 'esriFieldTypeDouble'
+                                else:
+                                    esri_type = 'esriFieldTypeString'
+                                
+                                feature_collection['layerDefinition']['fields'].append({
+                                    'name': field,
+                                    'type': esri_type,
+                                    'alias': field
+                                })
+                            
+                            # Create feature layer using import_data
+                            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                            unique_title = f"{layer_title}_{timestamp}"
+                            
+                            feature_service = st.session_state.gis.content.import_data(
+                                feature_collection,
+                                title=unique_title,
+                                tags=[tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else ["shapefile", "uploaded"]
+                            )
                         
                         # Apply custom styling and popup configuration
                         try:
@@ -827,15 +933,23 @@ def create_new_layer():
                                 except Exception as e:
                                     st.warning(f"Could not add to web map {web_map.title}: {str(e)}")
                         
-                        # Show sample data
-                        st.subheader("Sample of created data")
-                        st.dataframe(gdf.head().drop(columns=['geometry'] if 'geometry' in gdf.columns else []))
+                            # Show sample data
+                            st.subheader("Sample of created data")
+                            st.dataframe(gdf.head().drop(columns=['geometry'] if 'geometry' in gdf.columns else []))
+                            
+                            # Clear processed data from session state
+                            if 'processed_gdf' in st.session_state:
+                                del st.session_state['processed_gdf']
+                            if 'shapefile_geometry_type' in st.session_state:
+                                del st.session_state['shapefile_geometry_type']
+                            if 'shapefile_fields' in st.session_state:
+                                del st.session_state['shapefile_fields']
                         
-                        # Clean up
-                        shutil.rmtree(temp_dir)
-                        
-                except Exception as e:
-                    st.error(f"Error creating layer: {str(e)}")
+                    except Exception as e:
+                        st.error(f"Error creating layer: {str(e)}")
+                        # Log error
+                        with open("update_log.txt", "a") as log_file:
+                            log_file.write(f"[{datetime.now()}] Error creating layer '{layer_title}': {str(e)}\n")
     
     if uploaded_file and not layer_title:
         st.warning("Please enter a layer title")
