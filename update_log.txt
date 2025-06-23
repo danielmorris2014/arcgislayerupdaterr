@@ -1,1 +1,3 @@
 2025-06-21 03:10:05,586 - INFO - User mogas1982 authenticated successfully
+[2025-06-23 03:38:22.088723] Creating layer: Peoples MST Fiber with 931 features
+[2025-06-23 03:38:22.186805] Error creating layer 'Peoples MST Fiber': 'dict' object has no attribute 'to_csv'

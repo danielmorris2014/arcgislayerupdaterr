@@ -323,13 +323,19 @@ def view_content():
             col1, col2 = st.columns(2)
             with col1:
                 if st.button("📥 Export Layer List as CSV"):
-                    csv_data = df.to_csv(index=False)
-                    st.download_button(
-                        label="Download CSV",
-                        data=csv_data,
-                        file_name=f"arcgis_layers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                        mime="text/csv"
-                    )
+                    try:
+                        if not df.empty:
+                            csv_data = df.to_csv(index=False)
+                            st.download_button(
+                                label="Download CSV",
+                                data=csv_data,
+                                file_name=f"arcgis_layers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                mime="text/csv"
+                            )
+                        else:
+                            st.warning("No data available to export")
+                    except Exception as e:
+                        st.error(f"Error exporting CSV: {str(e)}")
             
             with col2:
                 # Layer preview selection
