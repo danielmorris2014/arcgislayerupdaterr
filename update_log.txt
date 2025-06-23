@@ -249,3 +249,43 @@
 [2025-06-23 04:40:00.094832] Attempting CSV-compatible layer creation
 [2025-06-23 04:40:00.106048] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
 [2025-06-23 04:40:00.233786] Error creating layer 'MST Fiberr': 'dict' object has no attribute 'to_csv'
+[2025-06-23 04:44:18.692386] Starting shapefile processing
+[2025-06-23 04:44:18.701044] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:44:18.767033] Successfully read shapefile with GeoPandas
+[2025-06-23 04:44:18.768142] Added default ID column due to empty/missing attributes
+[2025-06-23 04:44:18.769369] Shapefile processing completed successfully
+[2025-06-23 04:44:18.770005] Cleaned up temporary files
+[2025-06-23 04:44:25.257575] Starting shapefile processing
+[2025-06-23 04:44:25.265188] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:44:25.277452] Successfully read shapefile with GeoPandas
+[2025-06-23 04:44:25.279964] Added default ID column due to empty/missing attributes
+[2025-06-23 04:44:25.282099] Shapefile processing completed successfully
+[2025-06-23 04:44:25.283260] Cleaned up temporary files
+[2025-06-23 04:44:29.784098] Starting shapefile processing
+[2025-06-23 04:44:29.788488] Extracted files: ['MST_BURIED.shx', 'MST_BURIED.dbf', 'MST_BURIED.idx', 'MST_BURIED.prj', 'MST_BURIED.shp']
+[2025-06-23 04:44:29.801276] Successfully read shapefile with GeoPandas
+[2025-06-23 04:44:29.804076] Added default ID column due to empty/missing attributes
+[2025-06-23 04:44:29.805534] Shapefile processing completed successfully
+[2025-06-23 04:44:29.806245] Cleaned up temporary files
+[2025-06-23 04:44:29.879607] Creating layer: MST Fiberr with 931 features
+[2025-06-23 04:44:29.880866] DataFrame shape: (931, 2), columns: ['geometry', 'id']
+[2025-06-23 04:44:29.882349] Publishing as user: MOgas1982 to https://privatesolutions.maps.arcgis.com
+[2025-06-23 04:44:29.883687] Validated GeoDataFrame with 931 features
+[2025-06-23 04:44:29.884376] Initial data type: <class 'geopandas.geodataframe.GeoDataFrame'>
+[2025-06-23 04:44:29.884384] Data shape: (931, 2)
+[2025-06-23 04:44:29.884393] Data columns: ['geometry', 'id']
+[2025-06-23 04:44:29.885182] After copy - type: <class 'geopandas.geodataframe.GeoDataFrame'>
+[2025-06-23 04:44:29.885515] Converting 931 geometries to WKT
+[2025-06-23 04:44:29.921081] After dropping geometry - type: <class 'pandas.core.frame.DataFrame'>
+[2025-06-23 04:44:29.921427] After pd.DataFrame() conversion - type: <class 'pandas.core.frame.DataFrame'>
+[2025-06-23 04:44:29.921441] DataFrame shape: (931, 2)
+[2025-06-23 04:44:29.921457] DataFrame columns: ['id', 'wkt_geometry']
+[2025-06-23 04:44:29.921829] DataFrame operations test passed
+[2025-06-23 04:44:29.921837] Sample data: [{'id': 1, 'wkt_geometry': 'LINESTRING Z (-95.54555760200398 32.85073875063241 0, -95.54476 32.85264000001677 0)'}]
+[2025-06-23 04:44:29.934760] Testing CSV conversion - data type: <class 'pandas.core.frame.DataFrame'>
+[2025-06-23 04:44:29.947572] CSV conversion successful - length: 286562
+[2025-06-23 04:44:29.947678] Attempting layer creation with type: <class 'pandas.core.frame.DataFrame'>
+[2025-06-23 04:44:30.754006] Spatial method failed: Layer creation returned invalid result, using enhanced fallback
+[2025-06-23 04:44:30.755010] Attempting CSV-compatible layer creation
+[2025-06-23 04:44:30.764896] CSV method failed: 'str' object has no attribute 'to_csv', using minimal fallback
+[2025-06-23 04:44:30.899286] Error creating layer 'MST Fiberr': 'dict' object has no attribute 'to_csv'
