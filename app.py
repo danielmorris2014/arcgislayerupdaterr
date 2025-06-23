@@ -754,7 +754,8 @@ def create_new_layer():
                         
                 except Exception as e:
                     st.error(f"Error creating layer: {str(e)}")
-    elif uploaded_file and not layer_title:
+    
+    if uploaded_file and not layer_title:
         st.warning("Please enter a layer title")
 
 def merge_layers():
@@ -1331,6 +1332,8 @@ def main():
         update_existing_layer()
     elif page == "Create Layer":
         create_new_layer()
+    elif page == "Layer Editor":
+        layer_editor()
     elif page == "Merge Layers":
         merge_layers()
     elif page == "Delete Layer":
