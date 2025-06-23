@@ -478,12 +478,36 @@ def update_existing_layer():
 
 def get_shapefile_info_geopandas(zip_file):
     """Get shapefile geometry type and field names using geopandas"""
+    temp_dir = None
     try:
-        # Extract and load shapefile using existing function
-        gdf, temp_dir = extract_and_load_shapefile(zip_file)
+        # Save uploaded file to temporary location
+        temp_dir = tempfile.mkdtemp()
+        zip_path = os.path.join(temp_dir, "uploaded.zip")
+        
+        # Reset file pointer to beginning
+        zip_file.seek(0)
+        with open(zip_path, "wb") as f:
+            f.write(zip_file.getvalue())
+        
+        # Extract zip file
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(temp_dir)
+        
+        # Find shapefile
+        shp_files = [f for f in os.listdir(temp_dir) if f.endswith('.shp')]
+        if not shp_files:
+            return None, None, "No .shp file found in the uploaded zip"
+        
+        shp_path = os.path.join(temp_dir, shp_files[0])
+        
+        # Read shapefile with geopandas
+        gdf = gpd.read_file(shp_path)
+        
+        if len(gdf) == 0:
+            return None, None, "Shapefile is empty"
         
         # Get geometry type from first feature
-        if len(gdf) > 0 and gdf.geometry.iloc[0] is not None:
+        if gdf.geometry.iloc[0] is not None:
             geom_type = gdf.geometry.iloc[0].geom_type
             # Map geopandas geometry types to standard names
             if geom_type in ['Point', 'MultiPoint']:
@@ -506,7 +530,9 @@ def get_shapefile_info_geopandas(zip_file):
         return geometry_type, field_names, None
         
     except Exception as e:
-        return None, None, str(e)
+        if temp_dir and os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+        return None, None, f"Error reading shapefile: {str(e)}"
 
 def create_new_layer():
     """Create a new feature layer with enhanced UI and customization"""
@@ -548,11 +574,33 @@ def create_new_layer():
                 st.success(message)
                 
                 # Get shapefile information using geopandas
-                geometry_type, field_names, error = get_shapefile_info_geopandas(uploaded_file)
+                with st.spinner("Analyzing shapefile..."):
+                    geometry_type, field_names, error = get_shapefile_info_geopandas(uploaded_file)
                 
                 if error:
                     st.error(f"Error reading shapefile: {error}")
+                    
+                    # Try to provide more debugging information
+                    with st.expander("🔍 Debugging Information"):
+                        st.write("**Troubleshooting steps:**")
+                        st.write("1. Ensure your zip file contains .shp, .shx, and .dbf files")
+                        st.write("2. Check that the shapefile is not corrupted")
+                        st.write("3. Verify the coordinate system is properly defined")
+                        st.write("4. Try re-exporting the shapefile from your GIS software")
+                        
+                        # Try to show zip contents
+                        try:
+                            uploaded_file.seek(0)
+                            with zipfile.ZipFile(uploaded_file, 'r') as zip_ref:
+                                file_list = zip_ref.namelist()
+                                st.write("**Files in uploaded zip:**")
+                                for file in file_list:
+                                    st.write(f"• {file}")
+                        except Exception as e:
+                            st.write(f"Could not read zip contents: {str(e)}")
+                
                 elif geometry_type and field_names:
+                    st.success(f"Successfully analyzed shapefile!")
                     st.info(f"Detected geometry type: **{geometry_type}**")
                     st.info(f"Available fields: **{', '.join(field_names)}**")
                     
@@ -590,6 +638,7 @@ def create_new_layer():
                             st.warning("No fields available for popup configuration")
                 else:
                     st.error("Could not read shapefile geometry or fields")
+                    st.info("Please check that your zip file contains a valid shapefile with .shp, .shx, and .dbf components")
             else:
                 st.error(message)
     
