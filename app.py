@@ -9,6 +9,10 @@ import os
 import shutil
 from datetime import datetime
 import json
+import folium
+from streamlit_folium import st_folium
+import warnings
+warnings.filterwarnings('ignore')
 
 # Page configuration
 st.set_page_config(
@@ -51,11 +55,12 @@ def authenticate():
     
     return True
 
-def get_feature_layers():
-    """Get user's existing feature layers"""
+@st.cache_data(ttl=300)
+def get_feature_layers(username):
+    """Get user's existing feature layers with caching"""
     try:
         search_results = st.session_state.gis.content.search(
-            query="owner:" + st.session_state.username,
+            query="owner:" + username,
             item_type="Feature Service",
             max_items=100
         )
@@ -64,11 +69,12 @@ def get_feature_layers():
         st.error(f"Error retrieving layers: {str(e)}")
         return []
 
-def get_web_maps():
-    """Get user's existing web maps"""
+@st.cache_data(ttl=300)
+def get_web_maps(username):
+    """Get user's existing web maps with caching"""
     try:
         search_results = st.session_state.gis.content.search(
-            query="owner:" + st.session_state.username,
+            query="owner:" + username,
             item_type="Web Map",
             max_items=100
         )
@@ -76,6 +82,157 @@ def get_web_maps():
     except Exception as e:
         st.error(f"Error retrieving web maps: {str(e)}")
         return []
+
+@st.cache_data(ttl=600)
+def get_layer_preview_data(layer_id, max_features=10):
+    """Get preview data for a layer with caching"""
+    try:
+        layer_item = st.session_state.gis.content.get(layer_id)
+        layer_collection = FeatureLayerCollection.fromitem(layer_item)
+        feature_layer = layer_collection.layers[0]
+        
+        # Query limited features
+        feature_set = feature_layer.query(return_count_only=False, result_record_count=max_features)
+        
+        if feature_set.features:
+            # Convert to DataFrame
+            df = feature_set.sdf
+            
+            # Get layer info
+            layer_info = {
+                'title': layer_item.title,
+                'feature_count': feature_layer.query(return_count_only=True),
+                'geometry_type': feature_layer.properties.geometryType,
+                'fields': [field['name'] for field in feature_layer.properties.fields]
+            }
+            
+            return df, layer_info
+        else:
+            return None, None
+            
+    except Exception as e:
+        st.error(f"Error loading layer preview: {str(e)}")
+        return None, None
+
+def validate_layer_compatibility(layers):
+    """Validate that layers are compatible for merging"""
+    if len(layers) < 2:
+        return False, "At least 2 layers are required for merging"
+    
+    try:
+        geometry_types = set()
+        for layer in layers:
+            layer_collection = FeatureLayerCollection.fromitem(layer)
+            feature_layer = layer_collection.layers[0]
+            geometry_types.add(feature_layer.properties.geometryType)
+        
+        if len(geometry_types) > 1:
+            return False, f"Layers have different geometry types: {', '.join(geometry_types)}"
+        
+        return True, "Layers are compatible for merging"
+        
+    except Exception as e:
+        return False, f"Error validating layer compatibility: {str(e)}"
+
+def create_layer_map(df, layer_title):
+    """Create a folium map for layer preview"""
+    try:
+        if df is None or len(df) == 0:
+            return None
+        
+        # Check if SHAPE column exists and has geometry
+        if 'SHAPE' not in df.columns:
+            return None
+            
+        # Convert to GeoDataFrame
+        gdf = df.set_geometry('SHAPE')
+        
+        # Calculate center point
+        bounds = gdf.total_bounds
+        center_lat = (bounds[1] + bounds[3]) / 2
+        center_lon = (bounds[0] + bounds[2]) / 2
+        
+        # Create map
+        m = folium.Map(
+            location=[center_lat, center_lon],
+            zoom_start=10,
+            tiles='OpenStreetMap'
+        )
+        
+        # Add features to map
+        for idx, row in gdf.iterrows():
+            if row.geometry is not None:
+                # Create popup content
+                popup_content = f"<b>{layer_title}</b><br>"
+                for col in df.columns:
+                    if col not in ['SHAPE', 'geometry'] and pd.notna(row[col]):
+                        popup_content += f"{col}: {row[col]}<br>"
+                
+                # Add geometry to map
+                folium.GeoJson(
+                    row.geometry.__geo_interface__,
+                    popup=folium.Popup(popup_content, max_width=300),
+                    tooltip=f"Feature {idx + 1}"
+                ).add_to(m)
+        
+        return m
+        
+    except Exception as e:
+        st.warning(f"Could not create map visualization: {str(e)}")
+        return None
+
+def preview_layer_data(layer_item, max_features=10):
+    """Display layer data preview with map and table"""
+    st.subheader(f"📊 Preview: {layer_item.title}")
+    
+    with st.spinner("Loading layer preview..."):
+        df, layer_info = get_layer_preview_data(layer_item.id, max_features)
+    
+    if df is not None and layer_info is not None:
+        # Layer information
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Total Features", layer_info['feature_count'])
+        with col2:
+            st.metric("Geometry Type", layer_info['geometry_type'])
+        with col3:
+            st.metric("Preview Records", len(df))
+        
+        # Tabbed view for data and map
+        tab1, tab2 = st.tabs(["📋 Attribute Table", "🗺️ Map View"])
+        
+        with tab1:
+            # Display attribute table
+            display_df = df.drop(columns=['SHAPE', 'geometry'], errors='ignore')
+            if len(display_df.columns) > 0:
+                st.dataframe(display_df, use_container_width=True)
+            else:
+                st.info("No attribute data to display")
+            
+            # Field information
+            with st.expander("Field Information"):
+                field_info = pd.DataFrame({
+                    'Field Name': layer_info['fields'],
+                    'Data Type': [df[field].dtype if field in df.columns else 'Unknown' 
+                                 for field in layer_info['fields']]
+                })
+                st.dataframe(field_info, use_container_width=True)
+        
+        with tab2:
+            # Display map
+            if 'SHAPE' in df.columns:
+                layer_map = create_layer_map(df, layer_item.title)
+                if layer_map:
+                    st_folium(layer_map, width=700, height=400)
+                else:
+                    st.info("Map visualization not available for this layer")
+            else:
+                st.info("No spatial data available for map display")
+        
+        return True
+    else:
+        st.warning("No data available for preview")
+        return False
 
 def validate_zip_file(zip_file):
     """Validate that zip file contains shapefile components"""
@@ -135,171 +292,224 @@ def extract_and_load_shapefile(zip_file):
         raise e
 
 def view_content():
-    """Display user's existing content"""
+    """Display user's existing content with enhanced UI and preview capabilities"""
     st.header("📋 Your ArcGIS Content")
     
-    # Feature Layers
-    st.subheader("Feature Layers")
-    feature_layers = get_feature_layers()
-    
-    if feature_layers:
-        layer_data = []
-        for layer in feature_layers:
-            # Get FeatureServer URL
-            try:
-                layer_collection = FeatureLayerCollection.fromitem(layer)
-                feature_server_url = layer_collection.url
-            except:
-                feature_server_url = "URL not available"
+    # Feature Layers section with enhanced UI
+    with st.expander("📊 Feature Layers", expanded=True):
+        feature_layers = get_feature_layers(st.session_state.username)
+        
+        if feature_layers:
+            layer_data = []
+            for layer in feature_layers:
+                # Get FeatureServer URL
+                try:
+                    layer_collection = FeatureLayerCollection.fromitem(layer)
+                    feature_server_url = layer_collection.url
+                except:
+                    feature_server_url = "URL not available"
+                
+                layer_data.append({
+                    "Title": layer.title,
+                    "ID": layer.id,
+                    "Type": layer.type,
+                    "Owner": layer.owner,
+                    "Created": datetime.fromtimestamp(layer.created/1000).strftime('%Y-%m-%d'),
+                    "FeatureServer URL": feature_server_url
+                })
             
-            layer_data.append({
-                "Title": layer.title,
-                "ID": layer.id,
-                "Type": layer.type,
-                "Owner": layer.owner,
-                "Created": datetime.fromtimestamp(layer.created/1000).strftime('%Y-%m-%d'),
-                "FeatureServer URL": feature_server_url
-            })
-        
-        df = pd.DataFrame(layer_data)
-        st.dataframe(df, use_container_width=True)
-        
-        # Export functionality
-        if st.button("📥 Export Layer List as CSV"):
-            csv_data = df.to_csv(index=False)
-            st.download_button(
-                label="Download CSV",
-                data=csv_data,
-                file_name=f"arcgis_layers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
-    else:
-        st.info("No feature layers found in your account")
+            df = pd.DataFrame(layer_data)
+            st.dataframe(df, use_container_width=True)
+            
+            # Layer actions
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📥 Export Layer List as CSV"):
+                    csv_data = df.to_csv(index=False)
+                    st.download_button(
+                        label="Download CSV",
+                        data=csv_data,
+                        file_name=f"arcgis_layers_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                        mime="text/csv"
+                    )
+            
+            with col2:
+                # Layer preview selection
+                layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+                selected_preview_key = st.selectbox(
+                    "Select layer to preview",
+                    options=[""] + list(layer_options.keys()),
+                    help="Choose a layer to view its data and spatial extent"
+                )
+            
+            # Display layer preview
+            if selected_preview_key:
+                selected_layer = layer_options[selected_preview_key]
+                st.info("Select a layer to preview its data before proceeding with any operations.")
+                preview_layer_data(selected_layer)
+                
+        else:
+            st.info("No feature layers found in your account")
     
-    # Web Maps
-    st.subheader("Web Maps")
-    web_maps = get_web_maps()
-    
-    if web_maps:
-        map_data = []
-        for web_map in web_maps:
-            map_data.append({
-                "Title": web_map.title,
-                "ID": web_map.id,
-                "Owner": web_map.owner,
-                "Created": datetime.fromtimestamp(web_map.created/1000).strftime('%Y-%m-%d')
-            })
+    # Web Maps section
+    with st.expander("🗺️ Web Maps"):
+        web_maps = get_web_maps(st.session_state.username)
         
-        df_maps = pd.DataFrame(map_data)
-        st.dataframe(df_maps, use_container_width=True)
-    else:
-        st.info("No web maps found in your account")
+        if web_maps:
+            map_data = []
+            for web_map in web_maps:
+                map_data.append({
+                    "Title": web_map.title,
+                    "ID": web_map.id,
+                    "Owner": web_map.owner,
+                    "Created": datetime.fromtimestamp(web_map.created/1000).strftime('%Y-%m-%d')
+                })
+            
+            df_maps = pd.DataFrame(map_data)
+            st.dataframe(df_maps, use_container_width=True)
+        else:
+            st.info("No web maps found in your account")
 
 def update_existing_layer():
-    """Update an existing feature layer"""
+    """Update an existing feature layer with enhanced UI and preview"""
     st.header("🔄 Update Existing Layer")
     
-    feature_layers = get_feature_layers()
+    feature_layers = get_feature_layers(st.session_state.username)
     
     if not feature_layers:
         st.warning("No feature layers found in your account")
         return
     
-    # Layer selection
-    layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
-    selected_layer_key = st.selectbox(
-        "Select layer to update",
-        options=list(layer_options.keys())
-    )
-    
-    if selected_layer_key:
-        selected_layer = layer_options[selected_layer_key]
-        
-        # Display current layer info
-        st.info(f"Selected: {selected_layer.title}")
-        
-        try:
-            layer_collection = FeatureLayerCollection.fromitem(selected_layer)
-            st.code(f"FeatureServer URL: {layer_collection.url}")
-        except:
-            st.warning("Could not retrieve FeatureServer URL")
-        
-        # File upload
-        uploaded_file = st.file_uploader(
-            "Upload updated shapefile (.zip)",
-            type=['zip'],
-            help="Upload a zip file containing .shp, .shx, .dbf, and optional .prj files"
+    # Layer selection with preview
+    with st.expander("📋 Select Layer to Update", expanded=True):
+        layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+        selected_layer_key = st.selectbox(
+            "Select layer to update",
+            options=list(layer_options.keys()),
+            help="Choose the layer you want to update with new data"
         )
         
-        if uploaded_file:
-            # Validate zip file
-            is_valid, message = validate_zip_file(uploaded_file)
+        if selected_layer_key:
+            selected_layer = layer_options[selected_layer_key]
             
-            if is_valid:
-                st.success(message)
+            # Display current layer info
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.info(f"Selected: {selected_layer.title}")
+                try:
+                    layer_collection = FeatureLayerCollection.fromitem(selected_layer)
+                    st.code(f"FeatureServer URL: {layer_collection.url}")
+                except:
+                    st.warning("Could not retrieve FeatureServer URL")
+            
+            with col2:
+                if st.button("👀 Preview Current Data", key="preview_current"):
+                    preview_layer_data(selected_layer)
+    
+    # File upload section
+    if selected_layer_key:
+        with st.expander("📁 Upload New Data", expanded=True):
+            st.info("Upload a zip file containing the updated shapefile data")
+            
+            uploaded_file = st.file_uploader(
+                "Upload updated shapefile (.zip)",
+                type=['zip'],
+                help="Upload a zip file containing .shp, .shx, .dbf, and optional .prj files"
+            )
+            
+            if uploaded_file:
+                # Validate zip file
+                is_valid, message = validate_zip_file(uploaded_file)
                 
-                if st.button("Update Layer", type="primary"):
-                    try:
-                        with st.spinner("Updating layer..."):
-                            # Extract and load shapefile
+                if is_valid:
+                    st.success(message)
+                    
+                    # Preview new data before updating
+                    with st.expander("👀 Preview New Data"):
+                        try:
                             gdf, temp_dir = extract_and_load_shapefile(uploaded_file)
-                            
-                            # Create temporary zip for upload
-                            temp_zip_path = os.path.join(temp_dir, "update.zip")
-                            with zipfile.ZipFile(temp_zip_path, 'w') as zip_ref:
-                                for root, dirs, files in os.walk(temp_dir):
-                                    for file in files:
-                                        if not file.endswith('.zip'):
-                                            file_path = os.path.join(root, file)
-                                            zip_ref.write(file_path, file)
-                            
-                            # Update layer
-                            layer_collection = FeatureLayerCollection.fromitem(selected_layer)
-                            result = layer_collection.manager.overwrite(temp_zip_path)
-                            
-                            if result:
-                                st.success("Layer updated successfully!")
-                                st.info(f"Records updated: {len(gdf)}")
-                                st.code(f"FeatureServer URL: {layer_collection.url}")
-                                
-                                # Show sample data
-                                st.subheader("Sample of updated data")
-                                st.dataframe(gdf.head().drop(columns=['geometry'] if 'geometry' in gdf.columns else []))
-                            else:
-                                st.error("Failed to update layer")
-                            
-                            # Clean up
+                            st.write(f"**Records in new data:** {len(gdf)}")
+                            st.dataframe(gdf.head().drop(columns=['geometry'] if 'geometry' in gdf.columns else []))
                             shutil.rmtree(temp_dir)
-                            
-                    except Exception as e:
-                        st.error(f"Error updating layer: {str(e)}")
-            else:
-                st.error(message)
+                        except Exception as e:
+                            st.warning(f"Could not preview new data: {str(e)}")
+                    
+                    # Confirmation section
+                    with st.expander("⚠️ Confirm Update", expanded=True):
+                        st.warning("This action will replace all existing data in the selected layer. This cannot be undone.")
+                        
+                        confirm_update = st.checkbox("I understand this will replace all existing data")
+                        
+                        if confirm_update and st.button("🔄 Update Layer", type="primary"):
+                            try:
+                                with st.spinner("Updating layer..."):
+                                    # Extract and load shapefile
+                                    gdf, temp_dir = extract_and_load_shapefile(uploaded_file)
+                                    
+                                    # Create temporary zip for upload
+                                    temp_zip_path = os.path.join(temp_dir, "update.zip")
+                                    with zipfile.ZipFile(temp_zip_path, 'w') as zip_ref:
+                                        for root, dirs, files in os.walk(temp_dir):
+                                            for file in files:
+                                                if not file.endswith('.zip'):
+                                                    file_path = os.path.join(root, file)
+                                                    zip_ref.write(file_path, file)
+                                    
+                                    # Update layer
+                                    layer_collection = FeatureLayerCollection.fromitem(selected_layer)
+                                    result = layer_collection.manager.overwrite(temp_zip_path)
+                                    
+                                    if result:
+                                        st.success("Layer updated successfully!")
+                                        st.info(f"Records updated: {len(gdf)}")
+                                        st.code(f"FeatureServer URL: {layer_collection.url}")
+                                        
+                                        # Show sample data
+                                        st.subheader("Sample of updated data")
+                                        st.dataframe(gdf.head().drop(columns=['geometry'] if 'geometry' in gdf.columns else []))
+                                    else:
+                                        st.error("Failed to update layer")
+                                    
+                                    # Clean up
+                                    shutil.rmtree(temp_dir)
+                                    
+                            except Exception as e:
+                                st.error(f"Error updating layer: {str(e)}")
+                else:
+                    st.error(message)
 
 def create_new_layer():
-    """Create a new feature layer"""
+    """Create a new feature layer with enhanced UI"""
     st.header("➕ Create New Layer")
     
-    # Layer details
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        layer_title = st.text_input("Layer Title", placeholder="Enter a title for your new layer")
-        layer_description = st.text_area("Description (Optional)", placeholder="Describe your layer")
-    
-    with col2:
-        layer_tags = st.text_input("Tags (comma-separated)", placeholder="tag1, tag2, tag3")
-        sharing_level = st.selectbox("Sharing Level", ["private", "org", "public"])
+    # Layer details section
+    with st.expander("📝 Layer Information", expanded=True):
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            layer_title = st.text_input("Layer Title", placeholder="Enter a title for your new layer")
+            layer_description = st.text_area("Description (Optional)", placeholder="Describe your layer")
+        
+        with col2:
+            layer_tags = st.text_input("Tags (comma-separated)", placeholder="tag1, tag2, tag3")
+            sharing_level = st.selectbox("Sharing Level", ["private", "org", "public"])
     
     # Web map selection
-    web_maps = get_web_maps()
-    if web_maps:
-        st.subheader("Add to Web Maps (Optional)")
-        map_options = {f"{web_map.title} ({web_map.id})": web_map for web_map in web_maps}
-        selected_maps = st.multiselect(
-            "Select web maps to add this layer to",
-            options=list(map_options.keys())
-        )
+    with st.expander("🗺️ Add to Web Maps (Optional)"):
+        web_maps = get_web_maps(st.session_state.username)
+        selected_maps = []
+        map_options = {}
+        
+        if web_maps:
+            st.info("Select web maps to automatically add this new layer to")
+            map_options = {f"{web_map.title} ({web_map.id})": web_map for web_map in web_maps}
+            selected_maps = st.multiselect(
+                "Select web maps",
+                options=list(map_options.keys()),
+                help="The new layer will be added to these web maps"
+            )
+        else:
+            st.info("No web maps found in your account")
     
     # File upload
     uploaded_file = st.file_uploader(
@@ -406,40 +616,61 @@ def create_new_layer():
         st.warning("Please enter a layer title")
 
 def merge_layers():
-    """Merge multiple feature layers"""
+    """Merge multiple feature layers with enhanced UI and validation"""
     st.header("🔗 Merge Layers")
     
-    feature_layers = get_feature_layers()
+    feature_layers = get_feature_layers(st.session_state.username)
     
     if len(feature_layers) < 2:
         st.warning("You need at least 2 feature layers to perform a merge")
         return
     
-    # Layer selection
-    layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
-    selected_layers = st.multiselect(
-        "Select layers to merge",
-        options=list(layer_options.keys()),
-        help="Select 2 or more layers to merge into a new layer"
-    )
+    # Layer selection with preview
+    with st.expander("📋 Select Layers to Merge", expanded=True):
+        layer_options = {f"{layer.title} ({layer.id})": layer for layer in feature_layers}
+        selected_layers = st.multiselect(
+            "Select layers to merge",
+            options=list(layer_options.keys()),
+            help="Select 2 or more layers to merge into a new layer"
+        )
+        
+        if len(selected_layers) >= 2:
+            # Validate layer compatibility
+            selected_layer_objects = [layer_options[key] for key in selected_layers]
+            is_compatible, compatibility_message = validate_layer_compatibility(selected_layer_objects)
+            
+            if is_compatible:
+                st.success(compatibility_message)
+            else:
+                st.error(compatibility_message)
+                return
+            
+            # Show selected layers info with preview option
+            st.subheader("Selected Layers")
+            for layer_key in selected_layers:
+                layer = layer_options[layer_key]
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"• {layer.title}")
+                with col2:
+                    if st.button(f"Preview", key=f"preview_{layer.id}"):
+                        preview_layer_data(layer)
+        
+        elif len(selected_layers) == 1:
+            st.info("Please select at least one more layer to merge")
     
+    # Merge configuration
     if len(selected_layers) >= 2:
-        # Show selected layers info
-        st.subheader("Selected Layers")
-        for layer_key in selected_layers:
-            layer = layer_options[layer_key]
-            st.write(f"• {layer.title}")
-        
-        # Merge options
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            merged_title = st.text_input("Title for merged layer", placeholder="Enter title for the new merged layer")
-            merged_description = st.text_area("Description (Optional)", placeholder="Describe the merged layer")
-        
-        with col2:
-            merged_tags = st.text_input("Tags (comma-separated)", placeholder="tag1, tag2, tag3")
-            sharing_level = st.selectbox("Sharing Level", ["private", "org", "public"], key="merge_sharing")
+        with st.expander("⚙️ Merge Configuration", expanded=True):
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                merged_title = st.text_input("Title for merged layer", placeholder="Enter title for the new merged layer")
+                merged_description = st.text_area("Description (Optional)", placeholder="Describe the merged layer")
+            
+            with col2:
+                merged_tags = st.text_input("Tags (comma-separated)", placeholder="tag1, tag2, tag3")
+                sharing_level = st.selectbox("Sharing Level", ["private", "org", "public"], key="merge_sharing")
         
         if merged_title and st.button("Merge Layers", type="primary"):
             try:
