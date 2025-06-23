@@ -1048,65 +1048,96 @@ def create_new_layer():
                                 with open("update_log.txt", "a") as log_file:
                                     log_file.write(f"[{datetime.now()}] Published layer using spatial.to_featurelayer\n")
                             except Exception as spatial_error:
-                                # Fallback to manual feature collection creation
+                                # Enhanced fallback using safe data handling
                                 with open("update_log.txt", "a") as log_file:
-                                    log_file.write(f"[{datetime.now()}] Spatial method failed: {str(spatial_error)}, using fallback\n")
+                                    log_file.write(f"[{datetime.now()}] Spatial method failed: {str(spatial_error)}, using enhanced fallback\n")
                                 
-                                # Convert GeoDataFrame to feature collection manually
-                                features = []
-                                for idx, row in gdf.iterrows():
-                                    geom = row.geometry
-                                    if geom is not None:
-                                        # Convert geometry to ArcGIS format
-                                        geom_dict = geom.__geo_interface__
-                                        
-                                        # Prepare attributes
-                                        attributes = {}
-                                        for field in field_names:
-                                            value = row[field]
-                                            if pd.isna(value):
-                                                attributes[field] = None
-                                            else:
-                                                attributes[field] = value
-                                        
-                                        features.append({
-                                            'geometry': geom_dict,
-                                            'attributes': attributes
-                                        })
-                                
-                                # Create feature collection
-                                feature_collection = {
-                                    'layerDefinition': {
-                                        'geometryType': f'esriGeometry{geometry_type}',
-                                        'fields': []
-                                    },
-                                    'featureSet': {
-                                        'features': features
-                                    }
-                                }
-                                
-                                # Add field definitions
-                                for field in field_names:
-                                    field_type = str(gdf[field].dtype)
-                                    if 'int' in field_type:
-                                        esri_type = 'esriFieldTypeInteger'
-                                    elif 'float' in field_type:
-                                        esri_type = 'esriFieldTypeDouble'
-                                    else:
-                                        esri_type = 'esriFieldTypeString'
+                                try:
+                                    # Use safe layer creation function to avoid CSV errors
+                                    result = create_layer_with_safe_handling(gdf, unique_title)
                                     
-                                    feature_collection['layerDefinition']['fields'].append({
-                                        'name': field,
-                                        'type': esri_type,
-                                        'alias': field
-                                    })
-                                
-                                # Create feature layer using import_data
-                                feature_service = st.session_state.gis.content.import_data(
-                                    feature_collection,
-                                    title=unique_title,
-                                    tags=[tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else ["shapefile", "uploaded"]
-                                )
+                                    if result.get('success'):
+                                        feature_service = result.get('layer_item')
+                                        with open("update_log.txt", "a") as log_file:
+                                            log_file.write(f"[{datetime.now()}] Successfully created layer using safe handling method\n")
+                                    else:
+                                        raise Exception(f"Safe layer creation failed: {result.get('error', 'Unknown error')}")
+                                        
+                                except Exception as safe_error:
+                                    # Final fallback - create minimal feature collection without problematic data
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] Safe method failed: {str(safe_error)}, using minimal fallback\n")
+                                    
+                                    # Create simplified features with only basic attributes
+                                    features = []
+                                    for idx, row in gdf.iterrows():
+                                        try:
+                                            geom = row.geometry
+                                            if geom is not None and hasattr(geom, '__geo_interface__'):
+                                                geom_dict = geom.__geo_interface__
+                                                
+                                                # Create minimal attributes (avoid complex data types)
+                                                attributes = {'OBJECTID': idx + 1}
+                                                
+                                                # Only add string/numeric fields
+                                                for field in field_names:
+                                                    try:
+                                                        value = row[field]
+                                                        if pd.notna(value):
+                                                            # Convert to string to avoid type issues
+                                                            attributes[field] = str(value)[:255]
+                                                    except:
+                                                        # Skip problematic fields
+                                                        continue
+                                                
+                                                features.append({
+                                                    'geometry': geom_dict,
+                                                    'attributes': attributes
+                                                })
+                                        except Exception as feature_error:
+                                            # Skip problematic features
+                                            with open("update_log.txt", "a") as log_file:
+                                                log_file.write(f"[{datetime.now()}] Skipping feature {idx}: {str(feature_error)}\n")
+                                            continue
+                                    
+                                    if not features:
+                                        raise Exception("No valid features could be created from the shapefile")
+                                    
+                                    # Create minimal feature collection
+                                    feature_collection = {
+                                        'layerDefinition': {
+                                            'geometryType': f'esriGeometry{geometry_type}',
+                                            'objectIdField': 'OBJECTID',
+                                            'fields': [
+                                                {
+                                                    'name': 'OBJECTID',
+                                                    'type': 'esriFieldTypeOID',
+                                                    'alias': 'Object ID'
+                                                }
+                                            ] + [
+                                                {
+                                                    'name': field,
+                                                    'type': 'esriFieldTypeString',
+                                                    'alias': field,
+                                                    'length': 255
+                                                } for field in field_names[:10]  # Limit fields
+                                            ]
+                                        },
+                                        'featureSet': {
+                                            'features': features,
+                                            'geometryType': f'esriGeometry{geometry_type}'
+                                        }
+                                    }
+                                    
+                                    # Create feature layer using import_data
+                                    feature_service = st.session_state.gis.content.import_data(
+                                        feature_collection,
+                                        title=unique_title,
+                                        tags=[tag.strip() for tag in layer_tags.split(',') if tag.strip()] if layer_tags else ["shapefile", "uploaded"]
+                                    )
+                                    
+                                    with open("update_log.txt", "a") as log_file:
+                                        log_file.write(f"[{datetime.now()}] Successfully created layer using minimal fallback\n")
                         
                         # Initialize layer_collection with proper scope
                         layer_collection = None
