@@ -11,7 +11,7 @@ from datetime import datetime
 import json
 import folium
 from streamlit_folium import st_folium
-import fiona
+# import fiona  # Removed due to system dependency issues
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -476,38 +476,36 @@ def update_existing_layer():
                 else:
                     st.error(message)
 
-def get_shapefile_info_fiona(zip_file):
-    """Get shapefile geometry type and field names using fiona"""
+def get_shapefile_info_geopandas(zip_file):
+    """Get shapefile geometry type and field names using geopandas"""
     try:
-        # Save uploaded file to temporary location
-        temp_dir = tempfile.mkdtemp()
-        zip_path = os.path.join(temp_dir, "uploaded.zip")
+        # Extract and load shapefile using existing function
+        gdf, temp_dir = extract_and_load_shapefile(zip_file)
         
-        with open(zip_path, "wb") as f:
-            f.write(zip_file.getvalue())
+        # Get geometry type from first feature
+        if len(gdf) > 0 and gdf.geometry.iloc[0] is not None:
+            geom_type = gdf.geometry.iloc[0].geom_type
+            # Map geopandas geometry types to standard names
+            if geom_type in ['Point', 'MultiPoint']:
+                geometry_type = 'Point'
+            elif geom_type in ['LineString', 'MultiLineString']:
+                geometry_type = 'LineString'
+            elif geom_type in ['Polygon', 'MultiPolygon']:
+                geometry_type = 'Polygon'
+            else:
+                geometry_type = geom_type
+        else:
+            geometry_type = 'Unknown'
         
-        # Extract zip file
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(temp_dir)
+        # Get field names (excluding geometry column)
+        field_names = [col for col in gdf.columns if col.lower() not in ['geometry', 'shape']]
         
-        # Find shapefile
-        shp_files = [f for f in os.listdir(temp_dir) if f.endswith('.shp')]
-        if not shp_files:
-            return None, None, None
-        
-        shp_path = os.path.join(temp_dir, shp_files[0])
-        
-        # Read with fiona
-        with fiona.open(shp_path) as src:
-            geometry_type = src.schema['geometry']
-            field_names = list(src.schema['properties'].keys())
-            
+        # Clean up
         shutil.rmtree(temp_dir)
+        
         return geometry_type, field_names, None
         
     except Exception as e:
-        if 'temp_dir' in locals():
-            shutil.rmtree(temp_dir, ignore_errors=True)
         return None, None, str(e)
 
 def create_new_layer():
@@ -549,8 +547,8 @@ def create_new_layer():
             if is_valid:
                 st.success(message)
                 
-                # Get shapefile information using fiona
-                geometry_type, field_names, error = get_shapefile_info_fiona(uploaded_file)
+                # Get shapefile information using geopandas
+                geometry_type, field_names, error = get_shapefile_info_geopandas(uploaded_file)
                 
                 if error:
                     st.error(f"Error reading shapefile: {error}")
